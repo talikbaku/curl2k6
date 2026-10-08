@@ -1,0 +1,8 @@
+{
+  "name": "curl2k6",
+  "version": "1.2.0",
+  "description": "Turn a curl into a k6 load test, run it across load profiles locally or on your CI, collect metrics, write a report and flag regressions against the previous run. Includes the curl2k6 skill and the curl2k6-runner agent.",
+  "author": { "name": "Talat Gurbanbayov" },
+  "license": "MIT",
+  "keywords": ["k6", "load-testing", "performance", "qa", "curl", "regression", "grafana", "confluence"]
+}

@@ -1,0 +1,78 @@
+# Self-contained Azure DevOps demo of curl2k6 — needs nothing but an agent:
+# starts the bundled demo service on the agent, runs the profiles against it (healthy, then a
+# simulated bad release), builds the report sections and compares them. `run-demo.sh` treats the
+# expected regression as success; the last step shows how a real pipeline gates on a regression.
+#
+# Create once (from a clone of curl2k6 pushed to Azure Repos or connected from GitHub):
+#   az pipelines create --name curl2k6-demo --yml-path examples/azure-pipelines.demo.yml --skip-first-run true
+# Run:
+#   az pipelines run --name curl2k6-demo --parameters profiles="low medium"
+
+trigger: none
+pr: none
+
+parameters:
+  - name: profiles
+    displayName: Profiles to run (space-separated)
+    type: string
+    default: low
+
+pool:
+  vmImage: ubuntu-latest   # or `name: <self-hosted pool>` — the demo only talks to 127.0.0.1
+
+steps:
+  - checkout: self
+
+  - task: NodeTool@0
+    inputs:
+      versionSpec: 22.x
+    displayName: Node 22
+
+  - bash: |
+      set -euo pipefail
+      if command -v k6 >/dev/null; then k6 version; exit 0; fi
+      K6_VERSION=v1.5.0
+      OS=$(uname -s); ARCH=$(uname -m)
+      case "$OS-$ARCH" in
+        Linux-x86_64)        PKG=linux-amd64;  EXT=tar.gz ;;
+        Linux-aarch64)       PKG=linux-arm64;  EXT=tar.gz ;;
+        Darwin-arm64)        PKG=macos-arm64;  EXT=zip ;;
+        Darwin-x86_64)       PKG=macos-amd64;  EXT=zip ;;
+        *) echo "##vso[task.logissue type=error]No k6 build for $OS-$ARCH — install k6 on the agent"; exit 1 ;;
+      esac
+      DIR="$(Agent.TempDirectory)/k6"
+      mkdir -p "$DIR" && cd "$DIR"
+      URL="https://github.com/grafana/k6/releases/download/${K6_VERSION}/k6-${K6_VERSION}-${PKG}.${EXT}"
+      curl -sSfL -o "k6.${EXT}" "$URL"
+      if [ "$EXT" = zip ]; then unzip -q "k6.${EXT}"; else tar xzf "k6.${EXT}"; fi
+      "$DIR/k6-${K6_VERSION}-${PKG}/k6" version
+      echo "##vso[task.prependpath]$DIR/k6-${K6_VERSION}-${PKG}"
+    displayName: Install k6 (if missing)
+
+  - bash: npm test
+    displayName: Unit tests (scripts)
+
+  - bash: bash examples/run-demo.sh ${{ parameters.profiles }}
+    displayName: Demo — baseline vs. simulated bad release
+    env:
+      FORCE_COLOR: '1'
+
+  - bash: |
+      set -uo pipefail
+      node plugins/curl2k6/skills/curl2k6/scripts/compare.mjs \
+        --prev examples/out/baseline/raw.json --curr examples/out/current/raw.json \
+        --format text --fail-on-regression
+      code=$?
+      if [ "$code" = 1 ]; then
+        echo "##vso[task.logissue type=warning]Regression detected — in a real pipeline this exit code 1 fails the run. Expected here (SLOW release)."
+        exit 0
+      fi
+      exit "$code"
+    displayName: Regression gate (expected to detect one)
+    env:
+      FORCE_COLOR: '1'
+
+  - publish: examples/out
+    artifact: curl2k6-demo
+    displayName: Publish demo output
+    condition: succeededOrFailed()

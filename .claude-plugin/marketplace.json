@@ -1,0 +1,16 @@
+{
+  "name": "curl2k6",
+  "owner": {
+    "name": "Talat Gurbanbayov"
+  },
+  "metadata": {
+    "description": "QA load-testing tools for Claude Code: curl -> k6 load test -> run -> report -> regression check."
+  },
+  "plugins": [
+    {
+      "name": "curl2k6",
+      "source": "./plugins/curl2k6",
+      "description": "curl -> k6 load test -> run across profiles (locally or on CI) -> metrics -> report -> deterministic comparison with the previous run"
+    }
+  ]
+}

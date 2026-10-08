@@ -1,0 +1,50 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
+
+  e2e-demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: grafana/setup-k6-action@v1
+      - name: Demo — baseline vs. simulated bad release (LOW profile)
+        run: bash examples/run-demo.sh low
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: demo-output
+          path: examples/out/
+
+  azure-pipelines-offline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install jsonschema pyyaml
+      - name: Validate pipelines against the official Azure Pipelines schema
+        run: |
+          curl -sSfL -o /tmp/service-schema.json https://raw.githubusercontent.com/microsoft/azure-pipelines-vscode/main/service-schema.json
+          python3 tests/azure/validate_schema.py /tmp/service-schema.json \
+            plugins/curl2k6/skills/curl2k6/templates/azure-pipelines.yml examples/azure-pipelines.demo.yml
+      - name: Emulate the demo pipeline job (installs k6 itself)
+        run: HIDE_K6=1 python3 tests/azure/azrun.py examples/azure-pipelines.demo.yml "$PWD" profiles=low
