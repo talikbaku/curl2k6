@@ -1,0 +1,12 @@
+{
+  "name": "curl2k6",
+  "version": "1.2.0",
+  "private": true,
+  "description": "Claude Code skill + agent: curl -> k6 load test -> run -> report -> regression check",
+  "license": "MIT",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test \"tests/*.test.mjs\"",
+    "demo": "bash examples/run-demo.sh"
+  }
+}

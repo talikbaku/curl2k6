@@ -1,0 +1,89 @@
+# curl2k6 — k6 load test pipeline for Azure DevOps.
+# Generated with the curl2k6 skill (Claude Code). Copy next to the test (e.g. load/azure-pipelines.yml),
+# replace the <PLACEHOLDERS>, and create the pipeline once:
+#   az pipelines create --name <pipeline-name> --yml-path load/azure-pipelines.yml --skip-first-run true
+# Run one profile:
+#   az pipelines run --name <pipeline-name> --branch <branch> --parameters profile=low targetEnv=stage
+#
+# Why parameters and not variables: a variable defined in a YAML `variables:` block can't be overridden
+# at queue time — `--variables LOAD_PROFILE=high` would be silently ignored and the run would use the
+# YAML value. Runtime parameters are typed, validated against `values:`, and always applied.
+
+trigger: none
+pr: none
+
+parameters:
+  - name: profile
+    displayName: Load profile
+    type: string
+    default: low
+    values: [low, medium, high]
+  - name: targetEnv
+    displayName: Target environment (recorded in the report)
+    type: string
+    default: <stage>
+  - name: baseUrl
+    displayName: Base URL of the service under test
+    type: string
+    default: <https://base-url-from-the-curl>
+  - name: testScript
+    displayName: k6 test script (path in the repo)
+    type: string
+    default: <load/name.js>
+
+# Microsoft-hosted agents can only reach public endpoints. If the service is reachable only from your
+# network, use a self-hosted agent pool instead:
+#   pool:
+#     name: <self-hosted-pool-name>
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+  - checkout: self
+
+  - bash: |
+      set -euo pipefail
+      if command -v k6 >/dev/null; then k6 version; exit 0; fi
+      K6_VERSION=v1.5.0
+      OS=$(uname -s); ARCH=$(uname -m)
+      case "$OS-$ARCH" in
+        Linux-x86_64)        PKG=linux-amd64;  EXT=tar.gz ;;
+        Linux-aarch64)       PKG=linux-arm64;  EXT=tar.gz ;;
+        Darwin-arm64)        PKG=macos-arm64;  EXT=zip ;;
+        Darwin-x86_64)       PKG=macos-amd64;  EXT=zip ;;
+        *) echo "##vso[task.logissue type=error]No k6 build for $OS-$ARCH — install k6 on the agent"; exit 1 ;;
+      esac
+      DIR="$(Agent.TempDirectory)/k6"
+      mkdir -p "$DIR" && cd "$DIR"
+      URL="https://github.com/grafana/k6/releases/download/${K6_VERSION}/k6-${K6_VERSION}-${PKG}.${EXT}"
+      curl -sSfL -o "k6.${EXT}" "$URL"
+      if [ "$EXT" = zip ]; then unzip -q "k6.${EXT}"; else tar xzf "k6.${EXT}"; fi
+      "$DIR/k6-${K6_VERSION}-${PKG}/k6" version
+      echo "##vso[task.prependpath]$DIR/k6-${K6_VERSION}-${PKG}"
+    displayName: Install k6 (if missing)
+
+  - bash: |
+      set -uo pipefail
+      RUN="$(Build.ArtifactStagingDirectory)/curl2k6"
+      mkdir -p "$RUN"                                   # k6 does not create OUT_DIR itself
+      k6 run \
+        -e LOAD_PROFILE='${{ parameters.profile }}' \
+        -e TARGET_ENV='${{ parameters.targetEnv }}' \
+        -e BASE_URL='${{ parameters.baseUrl }}' \
+        -e GIT_SHA="$(git rev-parse --short HEAD)" \
+        -e OUT_DIR="$RUN" \
+        '${{ parameters.testScript }}' 2>&1 | tee "$RUN/k6-${{ parameters.profile }}.log"
+      code=${PIPESTATUS[0]}
+      echo "k6 exit code: $code"
+      # 99 = thresholds crossed: the run itself is complete and the report will show which threshold failed.
+      if [ "$code" = 99 ]; then echo "##vso[task.logissue type=warning]k6 thresholds crossed"; exit 0; fi
+      exit "$code"
+    displayName: k6 run — ${{ parameters.profile }}
+    # Secret pipeline variables are NOT visible to scripts unless mapped here explicitly:
+    # env:
+    #   API_TOKEN: $(API_TOKEN)
+
+  - publish: $(Build.ArtifactStagingDirectory)/curl2k6
+    artifact: curl2k6-${{ parameters.profile }}
+    displayName: Publish summary-${{ parameters.profile }}.json + k6 log
+    condition: succeededOrFailed()
