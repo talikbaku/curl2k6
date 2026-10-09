@@ -1,6 +1,6 @@
 ---
 name: curl2k6
-description: Build, run, re-run and compare k6 load tests. Use when someone gives a curl or an endpoint and asks for a load / stress / performance test of an API (нагрузочный тест, нагрузочное тестирование, прогони нагрузку); and when they ask to re-run an existing k6 load test, whether a new release or deploy made the API slower or worse, or to compare with the last load-test run (сравни с прошлым прогоном, есть ли деградация) — including tests and reports made earlier with curl2k6. Runs locally or on the team's CI (GitLab, GitHub Actions, Jenkins, Azure DevOps), writes the report and computes regressions with bundled scripts. Not for front-end/Lighthouse performance, code profiling, DB query tuning, or reading dashboards when no load test is involved.
+description: Build, run, re-run and compare k6 load tests. Use when someone gives a curl, a HAR file, a Postman collection, an OpenAPI operation or an endpoint and asks for a load / stress / performance test of an API (нагрузочный тест, нагрузочное тестирование, прогони нагрузку); and when they ask to re-run an existing k6 load test, whether a new release or deploy made the API slower or worse, or to compare with the last load-test run (сравни с прошлым прогоном, есть ли деградация) — including tests and reports made earlier with curl2k6. Runs locally or on the team's CI (GitLab, GitHub Actions, Jenkins, Azure DevOps), writes the report and computes regressions with bundled scripts. Not for front-end/Lighthouse performance, code profiling, DB query tuning, or reading dashboards when no load test is involved.
 ---
 
 # curl2k6
@@ -25,7 +25,9 @@ Files next to this SKILL.md (paths below are relative to this skill's directory 
 
 Ask in one block; skip what the user already said.
 
-1. **The curl** (or endpoint description) — required. If it contains a real token, don't copy it anywhere; the test reads it from an env var. A token in a URL query string leaks into k6's own warnings and logs — move it to a header if the API allows.
+1. **The request** — required: a curl, or a HAR file / Postman collection / OpenAPI spec and which request in it (or an endpoint description). If it contains a real token, don't copy it anywhere; the test reads it from an env var.
+   - **HAR or Postman:** don't open the file into the conversation — a HAR holds live cookies and tokens. Run `node <skill_dir>/scripts/request-from.mjs <file> --list`, let the user pick a number, then `--pick <N>`: it prints a curl with tokens, cookies and secret-looking query/body fields already replaced by `$ENV` placeholders (stderr lists them and anything it couldn't convert). Build the test from that curl; the placeholders become env vars of the test.
+   - **OpenAPI:** list the operations (method, path, summary), let the user pick one, build the request from `servers`, the path and the spec's examples; ask only for required values that have no example. A token in a URL query string leaks into k6's own warnings and logs — move it to a header if the API allows.
 2. **Repo / working directory** — where does the test code live (or should live)?
 3. **Target: production or a lower environment?** Infer from the URL if possible, but always state it back and get explicit confirmation for production — production runs need stricter rules (§4).
 4. **Where to run** — locally (needs `k6` on this machine; good for a first run and for small loads) or on CI: GitLab CI, GitHub Actions, Jenkins, Azure DevOps, other. Look for `.gitlab-ci.yml`, `.github/workflows`, `Jenkinsfile`, `azure-pipelines.yml` (or an Azure Repos remote: `dev.azure.com` / `visualstudio.com`) first. Don't assume any of them. For Azure DevOps read `references/ci-azure-devops.md` before planning the run.

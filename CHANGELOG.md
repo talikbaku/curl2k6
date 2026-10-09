@@ -6,6 +6,8 @@ First public release (renamed from `k6-load-test` to `curl2k6`).
 
 ### Added
 - `scripts/compare.mjs` — deterministic comparison with the previous report: deltas, regression flags (strictly-greater, float-safe), comparability (`yes` / `not like-for-like` / `cannot be confirmed`), one-file-per-profile merging, reads the Raw numbers block straight from markdown reports, `--fail-on-regression` for CI gating.
+- `scripts/request-from.mjs` — lists the requests in a HAR file or a Postman collection and extracts one as a curl; tokens, cookies, API keys and secret-looking query/body fields become `$ENV` placeholders, values are never printed. OpenAPI specs are read by the skill directly.
+- `.devcontainer/` — open the repo in GitHub Codespaces with Node 22 and a checksum-verified k6 to run the demo without installing anything.
 - `scripts/to-raw.mjs` — builds the "Results by profile" tables and the Raw numbers block from `summary-<profile>.json` files.
 - `planOf(options)` in `templates/summary.js` — records executor, target rate / peak VUs and planned duration in every run, so comparisons can be confirmed instead of guessed.
 - `templates/test-template.js` — test skeleton with the agreed metric layout.
