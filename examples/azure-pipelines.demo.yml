@@ -23,6 +23,9 @@ pool:
 steps:
   - checkout: self
 
+  # NodeTool@0 is marked deprecated in favour of UseNode@1 (input `version`), but NodeTool@0 is what ran
+  # successfully on a real Azure DevOps agent (demo run 178418), and Microsoft's published YAML schema
+  # does not describe UseNode@1's inputs yet (schema validation rejects it). Switch once both are verified.
   - task: NodeTool@0
     inputs:
       versionSpec: 22.x

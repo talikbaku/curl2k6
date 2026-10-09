@@ -16,6 +16,15 @@ First public release (renamed from `k6-load-test` to `curl2k6`).
 - Azure DevOps support: `templates/azure-pipelines.yml`, `references/ci-azure-devops.md` (`az pipelines create/run/runs show/artifact download`, profile via runtime parameters, push-before-run, self-hosted pools, approvals, secret mapping), `examples/azure-pipelines.demo.yml` (self-contained demo), `docs/azure-devops.md` (first real run checklist), offline checks in `tests/azure/` (official schema, job emulator, `az` emulator) and in CI.
 - A previous report that exists only as a wiki page (Confluence): its Raw numbers block is saved to a local file and passed to `compare.mjs` — no comparison by hand.
 
+### Fixed (found in the first real Azure DevOps run)
+- A run with 100% 4xx finished `succeeded` because k6 exit code 99 was tolerated → template parameter `onThresholds` (`fail` by default: crossed thresholds make the run red, the artifact is still published; `warn` keeps the old behaviour); the test template logs status + body start of the first non-2xx responses.
+- Microsoft-hosted agents got `403 Your IP address is not allowed` from an IP-allowlisted API → recipe: use the team's pool, autoscaled pools may show 0 online agents, prove the target with a short smoke run.
+- First run with a variable group waits in `notStarted` (`Checkpoint.Authorization`) until the group is permitted → documented; template has the `variables: - group:` stub.
+- A secret holding several comma-separated keys → recipe notes list-valued secrets.
+- Azure DevOps Wiki: parent path uses the page title with spaces, not the URL slug; page creation via `az devops wiki page create`.
+- Push rejected by a commit-author-email policy (VS403702) → documented.
+- Reports were written in the conversation's language → reports and wiki pages are English unless the user explicitly asks otherwise.
+
 ### Fixed (found by running the skill end-to-end in Claude Code)
 - "Re-run the load test / did the release get slower?" did not trigger the skill → description now covers re-runs and regression checks; generated tests and reports carry a "Generated with curl2k6" marker.
 - `OUT_DIR` that doesn't exist made k6 silently skip the summary files (exit code 0) → the skill creates the folder first, and `to-raw.mjs` can read the `K6_SUMMARY_JSON` line from a saved k6 / CI log.

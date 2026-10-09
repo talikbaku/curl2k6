@@ -95,6 +95,8 @@ Tell the user before the run which report(s) will be the baseline, with their da
 
 ### 5b. Building the report
 
+**Language:** write the report — markdown file and wiki page, including the title, summary, findings and notes — in **English**, whatever language the conversation is in, unless the user explicitly asks for another language. Script output (tables, comparison, Raw numbers) is English anyway. Talk to the user in their language as usual; only the report is English.
+
 1. `node scripts/to-raw.mjs <run folder>/summary-*.json` (or the k6/CI logs) → prints the "Results by profile" tables, the "Runs" table (UTC start/end) and the "Raw numbers" block. Paste them verbatim; for CI runs add the CI links to the Runs table. `--commit <sha>` only overrides the commit recorded by the test. Also save the raw JSON: same inputs with `--format json > <run folder>/raw.json`.
 2. If there is a previous report: `node scripts/compare.mjs --prev <previous report(s)> --curr <run folder>/raw.json [--p95 N --p99 N --success-pp N --timeout-pp N] [--dedicated]` → prints the comparison section. Paste it verbatim. `--dedicated` only if the user said the environment is not shared; `local` counts as dedicated automatically.
 3. Fill the rest of `templates/report.md` (summary, over time, server side, runs, data sources, queries). Only what you have data for; when a section has no data, say why in "Data sources". The verdict must not call something a regression that `compare.mjs` marked "(not like-for-like)" or "(unconfirmed)".

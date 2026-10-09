@@ -484,7 +484,7 @@ Before a production run, warn the service owners / on-call — this is not done 
 | InfluxDB | ⚠ not verified | Recipe only |
 | GitLab CI | ✅ proven in practice | Many real runs (full chain) |
 | GitHub Actions / Jenkins | ⚠ not verified | General instructions |
-| Azure DevOps | ✅ offline / ⚠ no real run yet | Pipelines pass Microsoft's official schema; job steps run in an emulator (k6 install, run, thresholds → warning, artifact); Claude Code with the plugin drove an emulated `az` end to end (create → `--parameters` → poll → artifact → `compare.mjs`). Tools in `tests/azure/`. Real agents, approvals and the artifacts service: not yet |
+| Azure DevOps | ✅ verified on a real organization | Demo pipeline on a Microsoft-hosted agent; real API run (LOW + MEDIUM) on an autoscaled self-hosted pool with a variable-group secret, report to repo + Azure DevOps Wiki. Fixes from that run are in the recipe (IP-allowlisted APIs vs hosted agents, `Checkpoint.Authorization` for variable groups, list-valued secrets, wiki paths, commit-email policy VS403702). Offline checks stay in `tests/azure/`. Not yet re-run on real Azure: the `onThresholds=fail` default (emulated) |
 | Confluence | ✅ in practice (with an earlier version of the skill) | Same logic here; the report template is newer |
 | Comparison with the previous report | ✅ verified | Unit tests + 4 scenarios on real reports (v1.1); a full "CI → report → comparison" run with the v1.2 template hasn't been done on CI yet |
 

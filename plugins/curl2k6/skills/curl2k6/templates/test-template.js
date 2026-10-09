@@ -56,6 +56,8 @@ const http5xx = new Counter('<prefix>_5xx');
 
 // const pool = new SharedArray('ids', () => JSON.parse(open('./<pool>.json')));
 
+let shown = 0; // diagnostics: first non-2xx responses of this VU (a run can be green with 100% 4xx)
+
 export default function () {
   // const id = pool[Math.floor(Math.random() * pool.length)];
   const params = {
@@ -75,6 +77,10 @@ export default function () {
   if (res.error_code === 1050) timeouts.add(1); // k6 request timeout
   else if (res.status >= 400 && res.status < 500) http4xx.add(1);
   else if (res.status >= 500) http5xx.add(1);
+  if (!ok && shown < 3) { // status + start of the body of a non-2xx response; never log a 2xx body or a secret
+    shown += 1;
+    console.warn(`diag status=${res.status} error_code=${res.error_code} body=${String(res.body || '').slice(0, 200)}`);
+  }
   check(res, { '2xx': () => ok });
 }
 
