@@ -129,6 +129,7 @@ steps:
           printf '%s\n' "$content" > "$f" || return 1
         done
       }
+      REDACT_VARS="${REDACT_VARS:-${SECRET_ENV_NAMES:-}}"   # SECRET_ENV_NAMES: name used before 1.2.0 final
       if [ -n "${REDACT_VARS:-}" ] && ! scrub; then
         rm -f "$RUN"/*
         echo "##vso[task.logissue type=error]could not scrub secrets (check REDACT_VARS) — run files removed, not published"
@@ -154,7 +155,7 @@ steps:
       TEST_SCRIPT: ${{ replace(parameters.testScript, '$', '') }}
       ALLOWED_HOSTS: <host-from-the-curl>  # space-separated hosts this pipeline may load (and send the key to);
                                            # keep production hosts out of it unless this pipeline is meant for production
-      REDACT_VARS: API_TOKEN          # names (not values) of the secret env vars below, scrubbed from published files
+      REDACT_VARS: API_TOKEN               # names (not values) of the secret env vars below, scrubbed from published files
       # Secret pipeline variables are NOT visible to scripts unless mapped here explicitly
       # (k6 then reads it as __ENV.API_TOKEN — no -e needed):
       # API_TOKEN: $(API_TOKEN)

@@ -112,3 +112,28 @@ test('bad input exits 2 with a clear message; OpenAPI is pointed elsewhere', () 
   assert.match(run(har, '--bogus').stderr, /unknown argument --bogus/);
   assert.equal(run(har, '--pick', '9').status, 2);
 });
+
+test('URL secrets: user-info, encoded/+ keys, fragments, repeated keys; everything else keeps its encoding', () => {
+  const S = 'TOPSECRET42';
+  const urls = [
+    `https://u:${S}@a.example.com/p?q=a%20b+c&flag&k=1`,
+    `https://${S}@a.example.com/p`,
+    `https://a.example.com/p?api+key=${S}&api%20key=${S}&access%5Ftoken=${S}`,
+    `https://a.example.com/p?q=1#a?token=${S}`,
+    `https://a.example.com/#/route?token=${S}&x=%5B1%5D`,
+    `https://a.example.com/p?token=${S}&token=${S}&ids=1&ids=2`,
+    `$BASE_URL/p?k=&token=${S}`,
+  ];
+  const p = file('urls.har', { log: { entries: urls.map((url) => ({ request: { method: 'GET', url, headers: [] } })) } });
+  const outs = urls.map((_, i) => run(p, '--pick', String(i + 1), '--format', 'json'));
+  for (const o of outs) { assert.equal(o.status, 0, o.stderr); assert.ok(!(o.stdout + o.stderr).includes(S), o.stdout); }
+  const u = outs.map((o) => JSON.parse(o.stdout).url);
+  assert.equal(u[0], 'https://u:$URL_PASSWORD@a.example.com/p?q=a%20b+c&flag&k=1');
+  assert.equal(u[1], 'https://$URL_CREDENTIALS@a.example.com/p');
+  assert.equal(u[2], 'https://a.example.com/p?api+key=$API_KEY&api%20key=$API_KEY&access%5Ftoken=$ACCESS_TOKEN');
+  assert.equal(u[3], 'https://a.example.com/p?q=1#a?token=$TOKEN');
+  assert.equal(u[4], 'https://a.example.com/#/route?token=$TOKEN&x=%5B1%5D');
+  assert.equal(u[5], 'https://a.example.com/p?token=$TOKEN&token=$TOKEN&ids=1&ids=2');
+  assert.equal(u[6], '$BASE_URL/p?k=&token=$TOKEN');
+  assert.equal(outs[5].stderr.match(/secret-looking query parameter "token"/g).length, 1);
+});

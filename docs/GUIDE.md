@@ -91,7 +91,7 @@ You need **both** the skill and the agent for CI runs: the skill hands the run o
 
 - **Run anything without your confirmation** of the draft — and on production, without a separate confirmation for every run.
 - **Set up CI from scratch — except on Azure DevOps.** On Azure DevOps it adds `azure-pipelines.yml` from the bundled template and creates the pipeline (after your confirmation). For other CIs it suggests a local run or helps you write a pipeline as separate work.
-- **Create tokens or ask you to paste them into the chat.** Tokens must already be somewhere it can read them from (git remote, environment variable).
+- **Create tokens or ask you to paste them into the chat.** Tokens stay in an environment variable or a signed-in CLI (`az login`, `gh`, `glab`); the test refers to them by name only.
 - **Guess its way into a metrics system that isn't on the list.** For those you get the k6 summary only.
 - **Make decisions for you** after the report: it won't do "one more run to double-check" or file bugs on its own.
 
@@ -104,7 +104,7 @@ You need **both** the skill and the agent for CI runs: the skill hands the run o
 | Claude Code | yes | — |
 | Node.js ≥ 22 | yes | Runs `to-raw.mjs` / `compare.mjs` (no npm packages needed) |
 | A repo where the test will live | yes | The test code is written there and the MR is opened there |
-| API access to CI from your machine | to run on CI | Token in the git remote URL or in an environment variable (`GITLAB_TOKEN`, `GH_TOKEN`, …), VPN if the CI is internal. `glab` / `gh` make life easier but aren't required |
+| API access to CI from your machine | to run on CI | A signed-in CLI (`glab`, `gh`, `az login`) or a token in an environment variable, VPN if the CI is internal. `glab` / `gh` make life easier but aren't required |
 | k6 on your machine | only for local runs | `brew install k6` / [other OSes](https://grafana.com/docs/k6/latest/set-up/install-k6/) |
 | A Confluence connector in Claude (Atlassian MCP) | if you want the report in Confluence | Without it you get the markdown file only |
 | Access to a metrics backend | no, but strongly recommended | URL + token in an environment variable, or the Datadog MCP |
@@ -209,7 +209,7 @@ Claude asks its questions in one block. What it will ask and how to answer:
 | 6 | Load profiles | "defaults" or your own numbers | It suggests 3 tiers but **won't pick large numbers blindly** — it asks about SLOs / previous results |
 | 7 | Open an MR/PR? | "yes" | Yes by default |
 | 8 | Where to put the report | "md in `reports/`, and Confluence, space QA, under the page 'Load tests'" | Markdown file only if there's no wiki connector — and it tells you so |
-| 9 | How to get tokens | "token in the git remote URL" / "`GITLAB_TOKEN`" / "variable group in Azure Library" | It will **never** ask you to paste a token into the chat |
+| 9 | How to get tokens | "`API_TOKEN` env var" / "CI secret variable" / "variable group in Azure Library" | It will **never** ask you to paste a token into the chat |
 | 10 | Regression thresholds | "defaults" | Defaults: p95/p99 worse by >20%, success rate down by >1 pp, timeout share up by >0.1 pp |
 
 Why "where does k6 actually run" matters: if the CI job only *launches* k6 somewhere else (e.g. in a Kubernetes pod), a green CI job **does not mean** the test has finished, and the final numbers won't be in the CI log. Claude needs to know where to look for them.
@@ -426,7 +426,7 @@ Two layers:
 There's no hard-wired integration: Claude works with your CI the same way you would from a terminal — via the API (`curl`), `glab`, `gh`, the Jenkins API. So any CI reachable from your machine will do.
 
 Worth knowing:
-- **The token** is taken from where you said it lives (git remote URL, environment variable). It's never printed, committed, or put into the report.
+- **The token** is referenced by the env var name you gave (or the CI secret); Claude never reads the value. It's never printed, committed, or put into the report.
 - **Profile-selecting variables** are set afresh before every run.
 - **"Launcher" jobs.** If the CI job only dispatches k6 somewhere else (a Kubernetes pod, a separate runner, the cloud), it goes green within a minute while the test keeps running for several more. The agent waits for completion where k6 actually runs (k6 dashboard, pod logs, `k6_vus` metric = 0).
 - **Runner queues.** If an image build is waiting for a free runner, the agent waits rather than re-triggering.

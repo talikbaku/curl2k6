@@ -35,7 +35,7 @@ Layer A gives whole-run aggregates only (no time series). That is enough for a p
 ### B2. Grafana (front-end for any datasource)
 
 Grafana is not a store — it proxies to Prometheus / Loki / Elasticsearch / InfluxDB / etc. Use it when that's the only thing the user has access to.
-- Auth: service account token, `Authorization: Bearer` + the token env var the user named.
+- Auth: service account token, `Authorization: Bearer $<VAR the user named>`.
 - List datasources: `GET <grafana>/api/datasources` → note `uid` and `type`.
 - **Best path — reuse an existing dashboard panel's query** instead of writing one from scratch: `GET <grafana>/api/search?query=<name>` → `GET <grafana>/api/dashboards/uid/<uid>` → `dashboard.panels[].targets[]` (and `panels[].panels[]` for rows). The datasource is often set on the **panel**, not on the target — take `panel.datasource.uid` when the target has none. Substitute template vars (`$service`, `$__rate_interval` → `1m`, etc.).
 - Run a query: `POST <grafana>/api/ds/query` with
@@ -48,7 +48,7 @@ Grafana is not a store — it proxies to Prometheus / Loki / Elasticsearch / Inf
 ### B3. Datadog
 
 - **If a Datadog MCP server is connected, prefer it** (no keys needed): metrics via its metric query tool, APM via span aggregation tools. Probe with one small query first.
-- Otherwise API with `DD-API-KEY` and `DD-APPLICATION-KEY` headers from the env vars the user named; site varies (`api.datadoghq.com`, `api.datadoghq.eu`, `api.us5.datadoghq.com`, …) — ask, or read it from the team's agent config.
+- Otherwise API with `DD-API-KEY` and `DD-APPLICATION-KEY` headers from the env vars the user named; site varies (`api.datadoghq.com`, `api.datadoghq.eu`, `api.us5.datadoghq.com`, …) — ask the user, or use `$DD_SITE` if it is set.
   - Timeseries: `GET https://api.<site>/api/v1/query?from=<unix>&to=<unix>&query=<query>`.
 - Getting k6 metrics in (optional, usually not worth it): the built-in `statsd` output was **removed in k6 v0.55** — it needs a custom k6 binary built with the xk6-output-statsd extension (`K6_STATSD_ADDR=<dd-agent>:8125`, `K6_STATSD_ENABLE_TAGS=true`, metrics arrive as `k6.*`). Check `k6 version` first; if the team doesn't already have such a build, skip this and rely on Layer A + server-side APM below.
 - Server side without any k6 output (often the most useful): APM trace metrics for the target service. **Find the real metric name first** (search metrics with `trace` + tag `service:<svc>`) — it depends on the tracer/integration, e.g. `trace.http.server.request`, `trace.http.request`, `trace.servlet.request`, `trace.postgresql.query`. Then:

@@ -15,7 +15,7 @@ import { basename } from 'node:path';
 class BadInput extends Error {}
 
 const SECRET_HEADER = /^(authorization|proxy-authorization|cookie|x-api-key|api-key|apikey|x-auth-token|x-access-token|x-csrf-token|x-xsrf-token)$|token|secret|session|password|api[-_]?key/i;
-const SECRET_FIELD = /pass(word)?|secret|token|api[-_]?key|client[-_]?secret|session|signature|^sig$|^code$|^auth/i;
+const SECRET_FIELD = /pass(word)?|secret|token|api[-_ ]?key|client[-_]?secret|session|signature|^sig$|^code$|^auth/i;
 const DROP_HEADER = /^(:.*|host|content-length|connection|accept-encoding|priority|upgrade-insecure-requests|pragma|cache-control|te|sec-.*)$/i;
 const STATIC_EXT = /\.(js|mjs|css|png|jpe?g|gif|svg|webp|ico|woff2?|ttf|otf|eot|map|mp4|webm|mp3)(\?|$)/i;
 const STATIC_TYPE = new Set(['image', 'stylesheet', 'script', 'font', 'media', 'manifest', 'other', 'ping']);
@@ -111,25 +111,30 @@ function redact(req) {
       else notes.push(`API key "${name}" goes in the query string — prefer a header if the API allows (query strings end up in k6 logs)`);
     } else notes.push(`Postman auth type "${a.type}" is not converted — add it to the test by hand`);
   }
-  // query string — parsed as text (no URL object), other parameters keep their original encoding
-  let url = req.url;
-  const qi = url.indexOf('?');
-  if (qi >= 0) {
-    const hi = url.indexOf('#', qi);
-    const query = url.slice(qi + 1, hi < 0 ? undefined : hi);
-    let changed = false;
-    const parts = query.split('&').map((pair) => {
-      const eq = pair.indexOf('=');
-      if (eq < 0) return pair;
-      let k = pair.slice(0, eq); try { k = decodeURIComponent(k); } catch { /* keep raw */ }
-      const v = pair.slice(eq + 1);
-      if (!SECRET_FIELD.test(k) || /^\$[A-Z0-9_]+$/.test(v)) return pair;
-      changed = true;
-      notes.push(`secret-looking query parameter "${k}" — it will appear in k6 logs; move it to a header if the API allows`);
-      return `${pair.slice(0, eq)}=${placeholder(`query ?${k}=`, envName(k))}`;
-    });
-    if (changed) url = `${url.slice(0, qi)}?${parts.join('&')}${hi < 0 ? '' : url.slice(hi)}`;
-  }
+  // URL: credentials in user-info, then query parameters in the query string and in a #/route?… fragment.
+  // Parsed as text (no URL object), so everything else keeps its original encoding.
+  const scanParams = (query) => query.split('&').map((pair) => {
+    const eq = pair.indexOf('=');
+    if (eq < 0) return pair;
+    let k = pair.slice(0, eq).replace(/\+/g, ' ');
+    try { k = decodeURIComponent(k); } catch { notes.push(`query parameter "${pair.slice(0, eq)}" has broken %-encoding — check it by hand`); }
+    const v = pair.slice(eq + 1);
+    if (!SECRET_FIELD.test(k) || /^\$[A-Z0-9_]+$/.test(v)) return pair;
+    notes.push(`secret-looking query parameter "${k}" — it will appear in k6 logs; move it to a header if the API allows`);
+    return `${pair.slice(0, eq)}=${placeholder(`query ?${k}=`, envName(k))}`;
+  }).join('&');
+  let url = req.url.replace(/^([a-z][a-z0-9+.-]*:\/\/)([^/?#@]*)@/i, (m, scheme, info) => {
+    const c = info.indexOf(':');
+    notes.push('credentials in the URL (user:password@host) — prefer an Authorization header');
+    return c >= 0 ? `${scheme}${info.slice(0, c)}:${placeholder('password in the URL', 'URL_PASSWORD')}@` : `${scheme}${placeholder('credentials in the URL', 'URL_CREDENTIALS')}@`;
+  });
+  const hi = url.indexOf('#');
+  let main = hi < 0 ? url : url.slice(0, hi), frag = hi < 0 ? '' : url.slice(hi);
+  const qi = main.indexOf('?');
+  if (qi >= 0) main = `${main.slice(0, qi)}?${scanParams(main.slice(qi + 1))}`;
+  const fq = frag.indexOf('?');
+  if (fq >= 0) frag = `${frag.slice(0, fq)}?${scanParams(frag.slice(fq + 1))}`;
+  url = main + frag;
   // JSON body fields
   let body = req.body;
   if (body) {
@@ -146,7 +151,7 @@ function redact(req) {
   }
   if (dropped.length) notes.push(`dropped browser/transport headers: ${[...new Set(dropped)].join(', ')}`);
   const envs = [...new Set([...secrets.map((x) => x.env), ...req.envs])];
-  return { method: req.method, url, headers, body, secrets, envs, notes };
+  return { method: req.method, url, headers, body, secrets, envs, notes: [...new Set(notes)] };
 }
 
 // ---------- output ----------
