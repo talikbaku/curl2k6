@@ -73,7 +73,7 @@ node "$SCRIPTS/to-raw.mjs" "$OUT"/current/summary-*.json > "$OUT/current/results
 [ "${COMPACT:-0}" = 1 ] || echo "## Comparison with previous run"
 node "$SCRIPTS/compare.mjs" --prev "$OUT/baseline/raw.json" --curr "$OUT/current/raw.json" > "$OUT/current/comparison.md" || true
 set +e
-node "$SCRIPTS/compare.mjs" --prev "$OUT/baseline/raw.json" --curr "$OUT/current/raw.json" --format text --fail-on-regression
+node "$SCRIPTS/compare.mjs" --prev "$OUT/baseline/raw.json" --curr "$OUT/current/raw.json" --format text ${FORCE_COLOR:+--color} --fail-on-regression
 code=$?
 set -e
 echo

@@ -6,7 +6,7 @@
 //                    --curr <report.md|raw.json> \
 //                    [--p95 20] [--p99 20] [--success-pp 1] [--timeout-pp 0.1] \
 //                    [--dedicated] [--format md|text|json] [--fail-on-regression]
-//   md = report section (default), text = aligned terminal table (coloured on a TTY / FORCE_COLOR), json = everything
+//   md = report section (default), text = aligned terminal table (coloured on a TTY or with --color; --no-color turns it off), json = everything
 //
 // Inputs are the "Raw numbers" JSON block of a report (or a bare JSON file with the same shape).
 // Reports without that block (older format) make the script exit 2 — the caller then parses the
@@ -287,7 +287,7 @@ export function toMarkdown(result) {
   return out.join('\n') + '\n';
 }
 
-// plain-terminal rendering: aligned columns, colours only when asked (TTY / FORCE_COLOR, never with NO_COLOR)
+// plain-terminal rendering: aligned columns, colours only when asked (TTY or --color, never with --no-_COLOR)
 export function toText(result, { color = false } = {}) {
   const c = (code, t) => (color ? `\x1b[${code}m${t}\x1b[0m` : t);
   const red = (t) => c('1;31', t);
@@ -350,6 +350,7 @@ function main(argv) {
     if (!Number.isFinite(n)) throw new Error(`${flag} needs a number`);
     return n;
   };
+  let colorFlag = null;
   try {
     for (let i = 0; i < argv.length; i++) {
       const a = argv[i];
@@ -359,6 +360,8 @@ function main(argv) {
         format = argv[++i];
         if (!['md', 'json', 'text'].includes(format)) throw new Error('--format must be md, json or text');
       }
+      else if (a === '--color') colorFlag = true;
+      else if (a === '--no-color') colorFlag = false;
       else if (a === '--dedicated') opts.dedicated = true;
       else if (a === '--fail-on-regression') failOnRegression = true;
       else if (a === '--p95') opts.thresholds.p95 = num(argv[++i], a);
@@ -374,7 +377,7 @@ function main(argv) {
     const currRaw = extractRaw(readFileSync(curr, 'utf8'), curr);
     const prevRaws = prev.map((f) => ({ source: f, raw: extractRaw(readFileSync(f, 'utf8'), f) }));
     const result = compareRuns(prevRaws, currRaw, opts);
-    const color = !process.env.NO_COLOR && (Boolean(process.env.FORCE_COLOR) || process.stdout.isTTY === true);
+    const color = colorFlag ?? process.stdout.isTTY === true;
     console.log(format === 'json' ? JSON.stringify(result, null, 2) : format === 'text' ? toText(result, { color }) : toMarkdown(result));
     return failOnRegression && result.confirmed_regressions.length ? 1 : 0;
   } catch (e) {

@@ -129,7 +129,6 @@ steps:
           printf '%s\n' "$content" > "$f" || return 1
         done
       }
-      REDACT_VARS="${REDACT_VARS:-${SECRET_ENV_NAMES:-}}"   # SECRET_ENV_NAMES: name used before 1.2.0 final
       if [ -n "${REDACT_VARS:-}" ] && ! scrub; then
         rm -f "$RUN"/*
         echo "##vso[task.logissue type=error]could not scrub secrets (check REDACT_VARS) — run files removed, not published"

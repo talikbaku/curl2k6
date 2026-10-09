@@ -254,3 +254,14 @@ test('text format: a long regression list is summarised on one line', () => {
   const res = compareRuns([{ source: 'p', raw: { ...base, profiles: { low: base, high: base } } }], { ...base, profiles: { low: worse, high: worse } });
   assert.match(toText(res), /REGRESSION: 6 flags on LOW, HIGH — see ⚠ rows/);
 });
+
+test('--color / --no-color control ANSI colours without reading the environment', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'color-'));
+  const raw = (p95) => ({ test: 't', date: '2026-10-09', environment: 'local', endpoint: 'GET /x', script_commit: null, latency_metric: 'x',
+    profiles: { low: { executor: 'ramping-arrival-rate', target_rate_rps: 5, planned_duration_s: 60, requests: 100, success_rate: 1, p95_ms: p95, p99_ms: p95, timeouts: 0 } } });
+  writeFileSync(join(dir, 'a.json'), JSON.stringify(raw(100))); writeFileSync(join(dir, 'b.json'), JSON.stringify(raw(200)));
+  const out = (...f) => spawnSync(process.execPath, [SCRIPT, '--prev', join(dir, 'a.json'), '--curr', join(dir, 'b.json'), '--format', 'text', ...f], { encoding: 'utf8', env: { PATH: process.env.PATH, FORCE_COLOR: '1' } }).stdout;
+  assert.doesNotMatch(out(), /\x1b\[/);
+  assert.match(out('--color'), /\x1b\[1;31m/);
+  assert.doesNotMatch(out('--color', '--no-color'), /\x1b\[/);
+});

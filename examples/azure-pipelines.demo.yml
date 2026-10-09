@@ -75,7 +75,7 @@ steps:
       set -uo pipefail
       node plugins/curl2k6/skills/curl2k6/scripts/compare.mjs \
         --prev examples/out/baseline/raw.json --curr examples/out/current/raw.json \
-        --format text --fail-on-regression
+        --format text --color --fail-on-regression
       code=$?
       if [ "$code" = 1 ]; then
         echo "##vso[task.logissue type=warning]Regression detected — in a real pipeline this exit code 1 fails the run. Expected here (SLOW release)."
@@ -84,8 +84,6 @@ steps:
       if [ "$code" = 0 ]; then echo "##vso[task.logissue type=error]The demo's bad release was NOT detected — the demo is broken"; exit 1; fi
       exit "$code"
     displayName: Regression gate (expected to detect one)
-    env:
-      FORCE_COLOR: '1'
 
   - publish: examples/out
     artifact: curl2k6-demo
