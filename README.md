@@ -29,6 +29,33 @@ A [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) plugin (sk
 
 Ask again after each release — *"re-run the load test, did it get slower?"* — and the history builds itself.
 
+## No curl? Start from what you already have
+
+| You have | Ask Claude | What happens |
+|---|---|---|
+| a curl | paste it | the test is built from it |
+| a **HAR** from browser DevTools (Network → *Save all as HAR*) | *"load-test the items call from shop.har"* | API calls are listed (static files and preflights hidden), you pick one |
+| a **Postman** collection | *"load-test 'List items' from shop.postman_collection.json"* | folders, `{{variables}}` and inherited auth are resolved |
+| an **OpenAPI** spec | *"load-test GET /v2/items from openapi.yaml"* | Claude picks the operation and fills parameters from the spec's examples |
+
+**Your tokens never reach the chat.** A HAR carries live cookies and bearer tokens, so Claude doesn't open it — the bundled extractor does, and swaps every secret for an env variable first:
+
+```console
+$ node request-from.mjs shop.har --list
+shop.har: HAR, 7 request(s), 4 static/preflight hidden (--all shows them)
+   1  GET    200 https://shop.example.com/catalog
+   5  GET    200 https://api.example.com/v2/items?limit=50
+   6  POST   201 https://api.example.com/v2/cart
+
+$ node request-from.mjs shop.har --pick 5
+curl 'https://api.example.com/v2/items?limit=50' \
+  -H 'Authorization: Bearer '"$API_TOKEN" \
+  -H 'Cookie: '"$COOKIE" \
+  -H 'Accept: application/json'
+secret: header Authorization → $API_TOKEN (the test reads it from the environment; the value was not copied)
+secret: header Cookie → $COOKIE (the test reads it from the environment; the value was not copied)
+```
+
 ## What a report looks like
 
 From [`examples/reports/`](examples/reports/) — real k6 runs against the bundled demo service, before and after a simulated bad release:
@@ -68,6 +95,7 @@ Grafana's mcp-k6 helps an assistant write, validate and run k6 scripts; Grafana 
 
 | | |
 |---|---|
+| **Input** | curl · HAR (any browser's DevTools) · Postman collection v2.0 / v2.1 · OpenAPI / Swagger spec — one request per test |
 | **Run** | **locally** — verified · **Azure DevOps** — hardened pipeline template + `az` recipe, verified on one real organization ([checklist](docs/azure-devops.md); Linux/macOS agents with bash, and GitHub access or a preinstalled k6) · **GitLab CI, GitHub Actions, Jenkins** — Claude drives your team's existing pipeline with generic instructions; no bundled templates yet, and only GitLab has been used in practice (with an earlier version) |
 | **Metrics** | k6 summary (always, no backend needed) · Prometheus / VictoriaMetrics / Thanos / Mimir · Grafana · Datadog (MCP or API) · Elasticsearch / Kibana / OpenSearch · InfluxDB |
 | **Reports** | markdown file · Confluence or any wiki Claude has a connector for · Azure DevOps Wiki (via `az devops wiki`) — written in English by default |
