@@ -58,10 +58,8 @@ Copy `scripts/to-raw.mjs` and `scripts/compare.mjs` into the repo next to the te
 ```yaml
   - bash: |
       node load/to-raw.mjs "$(Build.ArtifactStagingDirectory)/curl2k6"/summary-*.json --format json > raw.json
-      node load/compare.mjs --prev load-reports/<last accepted report>.md --curr raw.json --format text --fail-on-regression
+      node load/compare.mjs --prev load-reports/<last accepted report>.md --curr raw.json --format text --color --fail-on-regression
     displayName: Regression gate
     condition: succeededOrFailed()      # the k6 step is red when thresholds are crossed (onThresholds=fail)
-    env:
-      FORCE_COLOR: '1'
 ```
 Exit 1 = regression on a comparable profile; exit 2 = bad input (also fails the pipeline — read the message).

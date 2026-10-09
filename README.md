@@ -202,13 +202,12 @@ jobs:
         run: mkdir -p out && k6 run -e TARGET_ENV=stage -e OUT_DIR=out load/orders.js 2>&1 | tee out/k6.log
       - name: Regression gate              # runs even when k6 thresholds failed the previous step
         if: always()
-        env: { FORCE_COLOR: '1' }
         run: |
           node load/to-raw.mjs out/summary-*.json --format json > out/raw.json
-          node load/compare.mjs --prev load-reports/baseline.md --curr out/raw.json --format text --fail-on-regression
+          node load/compare.mjs --prev load-reports/baseline.md --curr out/raw.json --format text --color --fail-on-regression
 ```
 
-`--fail-on-regression` exits 1 only for regressions on comparable profiles; exit 2 means bad input (the message says which). `--format text` prints an aligned, coloured table for CI logs.
+`--fail-on-regression` exits 1 only for regressions on comparable profiles; exit 2 means bad input (the message says which). `--format text --color` prints an aligned, coloured table for CI logs.
 
 ## Development
 
