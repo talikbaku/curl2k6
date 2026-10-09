@@ -26,7 +26,7 @@ jobs:
           node-version: 22
       - uses: grafana/setup-k6-action@43b9fc21641a76002687994433dd586f56e791b1 # v1.2.2
         with:
-          k6-version: '1.5.0'
+          k6-version: '2.3.0'
       - name: Demo — baseline vs. simulated bad release (LOW profile)
         run: bash examples/run-demo.sh low
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

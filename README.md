@@ -2,7 +2,7 @@
 
 [![test](https://github.com/talikbaku/curl2k6/actions/workflows/test.yml/badge.svg)](https://github.com/talikbaku/curl2k6/actions/workflows/test.yml)
 ![license](https://img.shields.io/badge/license-MIT-blue)
-![k6](https://img.shields.io/badge/k6-1.x-7D64FF)
+![k6](https://img.shields.io/badge/k6-2.x-7D64FF)
 ![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-D97757)
 ![node](https://img.shields.io/badge/node-%E2%89%A522-339933)
 
@@ -196,7 +196,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - uses: grafana/setup-k6-action@v1
-        with: { k6-version: '1.5.0' }
+        with: { k6-version: '2.3.0' }
       - name: k6 run                       # inputs go through env — never pasted into the script
         env: { LOAD_PROFILE: "${{ inputs.profile }}", API_TOKEN: "${{ secrets.API_TOKEN }}" }
         run: mkdir -p out && k6 run -e TARGET_ENV=stage -e OUT_DIR=out load/orders.js 2>&1 | tee out/k6.log

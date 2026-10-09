@@ -2,7 +2,7 @@
 # Installs a pinned, checksum-verified k6 for the dev container / Codespace.
 set -euo pipefail
 if command -v k6 >/dev/null; then echo "k6 already installed: $(k6 version)"; exit 0; fi
-K6_VERSION=${K6_VERSION:-v1.5.0}
+K6_VERSION=${K6_VERSION:-v2.3.0}
 case "$(uname -m)" in
   x86_64)        PKG=linux-amd64 ;;
   aarch64|arm64) PKG=linux-arm64 ;;

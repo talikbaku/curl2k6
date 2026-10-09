@@ -5,6 +5,7 @@
 First public release (renamed from `k6-load-test` to `curl2k6`).
 
 ### Added
+- k6 pinned to **v2.3.0** (latest) in the Azure template, dev container, CI and README example; the demo passes end-to-end on v2.3.0 and v1.5.0 (nothing the plugin uses changed in k6 2.0: `handleSummary`, thresholds, exit code 99, arrival-rate executors).
 - `scripts/compare.mjs` — deterministic comparison with the previous report: deltas, regression flags (strictly-greater, float-safe), comparability (`yes` / `not like-for-like` / `cannot be confirmed`), one-file-per-profile merging, reads the Raw numbers block straight from markdown reports, `--fail-on-regression` for CI gating.
 - `scripts/request-from.mjs` — lists the requests in a HAR file or a Postman collection and extracts one as a curl; tokens, cookies, API keys and secret-looking query/body fields become `$ENV` placeholders, values are never printed. OpenAPI specs are read by the skill directly.
 - `.devcontainer/` — open the repo in GitHub Codespaces with Node 22 and a checksum-verified k6 to run the demo without installing anything.

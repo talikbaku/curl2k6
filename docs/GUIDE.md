@@ -482,7 +482,7 @@ Before a production run, warn the service owners / on-call — this is not done 
 
 | What | Status | How it was checked |
 |---|---|---|
-| k6 summary (`summary.js`) | ✅ verified | Real k6 v1.5 runs (public test site; bundled demo service) |
+| k6 summary (`summary.js`) | ✅ verified | Real k6 runs on v1.5 and v2.3 (public test site; bundled demo service) |
 | Report numbers + comparison (`to-raw.mjs`, `compare.mjs`) | ✅ verified | Unit tests + local end-to-end demo |
 | Local runs | ✅ verified | `examples/run-demo.sh` |
 | The skill inside Claude Code | ✅ verified (local runs) | Headless Claude Code sessions with the plugin, fresh repo: curl → test → run → report; then "re-run, did it get worse?" in English and in Russian → skill picked up, previous report found, `compare.mjs` used, regression reported. Found and fixed along the way: re-run requests didn't trigger the skill; a missing `OUT_DIR` silently dropped the summary files; the report pointed at a commit made before the test |
