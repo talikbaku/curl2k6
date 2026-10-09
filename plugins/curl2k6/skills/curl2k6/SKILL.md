@@ -35,7 +35,7 @@ Ask in one block; skip what the user already said.
 6. **Load profiles** — offer the default shape (§2) and let the user override counts/durations/thresholds.
 7. **Open a PR/MR?** Default yes for CI runs — new test code and test-data changes go through review before anything runs against a real environment. If the user doesn't want to wait for the merge, the pipeline can run from the branch. For a purely local run against a dev/local target, a local commit is enough.
 8. **Report destination** — a markdown file (default `load-reports/` in the repo) and/or a wiki page (ask which space/site and under which parent page). Don't assume Confluence or any specific space. A wiki page needs a way to write it: a connector in this session (e.g. an Atlassian/Confluence MCP) or a CLI that can (Azure DevOps Wiki: `az devops wiki`, see `references/ci-azure-devops.md`). If neither exists, produce the markdown file only and say so. Ask whether a previous report for the same test exists (§5a).
-9. **Credentials** — ask how tokens are obtained (already in a git remote URL, an env var, a secrets manager, a CI variable group). Never ask the user to paste a literal secret into the chat.
+9. **Credentials** — ask which env var or CI secret holds the API token (e.g. `API_TOKEN` exported in the user's own terminal, a CI variable group). The test only references it by name. Never ask the user to paste a literal secret into the chat.
 10. **Regression thresholds** — defaults: p95/p99 worse by >20%, success rate down by >1 pp, timeout share up by >0.1 pp. Mention them; change only if the user asks.
 
 ## 1. Discover conventions before writing anything
@@ -143,7 +143,7 @@ Tell the user before the run which report(s) will be the baseline, with their da
 
 ## 6. Gotchas
 
-- Extract CI tokens from wherever they already live (git remote URL, env var) at run time — never hardcode one in a prompt, commit, or file.
+- Never read, extract or print a credential yourself. Use tools that are already signed in (the CI CLI session, the CI's own secret variables) and refer to tokens only by env var name, so k6 or the CI reads the value — never put one in a prompt, commit, file or URL.
 - Some sandboxes block a bare `sleep` call outright. Poll with short individual checks rather than one long blocking wait; for multi-minute cooldowns between profiles, fill the time with real work (pulling partial metrics, drafting the report) and confirm elapsed time via timestamps.
 - A green CI job that only *launches* k6 elsewhere is not a finished run — confirm completion where k6 actually runs.
 - Profile-selecting CI variables go stale between runs: set them immediately before every trigger (Azure: runtime parameters, see the recipe).
