@@ -177,6 +177,74 @@ test('text format: aligned, colour only on request, labels unconfirmed flags', (
   assert.match(colored, /\x1b\[1;31m⚠ regression/);
   const other = toText(compareRuns(prev, { ...base, environment: 'prod', profiles: { low: { ...base, environment: 'prod', p95_ms: 150 } } }));
   assert.match(other, /NOT like-for-like/);
-  assert.match(other, /⚠ regression \(unconfirmed\)/);
+  assert.match(other, /⚠ regression \(not like-for-like\)/);
   assert.match(other, /No regressions on comparable profiles/);
+});
+
+
+// ---- regressions found by the independent review ----
+import { validateRaw, BadInputError } from '../plugins/curl2k6/skills/curl2k6/scripts/compare.mjs';
+
+test('review: non-numeric values are rejected (exit 2), never a silent ✓', () => {
+  for (const [f, v] of [['p95_ms', '1,234'], ['success_rate', '99.50%'], ['timeouts', 'n/a'], ['p99_ms', NaN]]) {
+    assert.throws(() => validateRaw({ profiles: { low: { ...base, [f]: v } } }, 'x'), BadInputError, `${f}=${v}`);
+  }
+  assert.throws(() => validateRaw({ profiles: { low: { ...base, success_rate: 99.5 } } }, 'x'), /fraction 0\.\.1/);
+  assert.throws(() => validateRaw({ profiles: { low: { ...base, requests: -1 } } }, 'x'), />= 0/);
+});
+
+test('review: wrong-shaped input (k6 summary.json, {}, profiles:null) is an error, not "Baseline run"', () => {
+  for (const raw of [{}, { profiles: null }, { profiles: {} }, { metrics: {}, meta: {} }, { profiles: { low: 5 } }]) {
+    assert.throws(() => validateRaw(raw, 'x'), BadInputError);
+  }
+  const dir = mkdtempSync(join(tmpdir(), 'curl2k6-'));
+  const k6sum = join(dir, 'summary-low.json');
+  const curr = join(dir, 'curr.json');
+  writeFileSync(k6sum, JSON.stringify({ meta: { profile: 'low' }, metrics: {} }));
+  writeFileSync(curr, JSON.stringify({ ...base, profiles: { low: base } }));
+  const r = spawnSync(process.execPath, [SCRIPT, '--prev', curr, '--curr', k6sum, '--fail-on-regression'], { encoding: 'utf8' });
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /not a curl2k6 raw file/);
+});
+
+test('review: Raw numbers block is taken from its own section only; "for future comparisons" wins', () => {
+  const noBlock = '## Raw numbers\n\n(none)\n\n## Appendix\n\n```json\n{"profiles":{"low":{"p95_ms":1}}}\n```\n';
+  assert.throws(() => extractRaw(noBlock), NoRawBlockError);
+  const two = '### Raw numbers (previous run)\n```json\n{"profiles":{"low":{"p95_ms":29.22}}}\n```\n' +
+    '## Raw numbers (for future comparisons)\n```json\n{"profiles":{"low":{"p95_ms":42.11}}}\n```\n';
+  assert.equal(extractRaw(two).profiles.low.p95_ms, 42.11);
+  const fencedHash = '## Raw numbers\n```json\n{"profiles":{"low":{"p95_ms":7}}}\n```\n## Appendix\n```bash\n# Raw numbers in a comment\n```\n';
+  assert.equal(extractRaw(fencedHash).profiles.low.p95_ms, 7);
+});
+
+test('review: most recent previous run wins by finished_at, then date (not by string order)', () => {
+  const a = records({ ...base, date: '2026-10-08', profiles: { low: { finished_at: '2026-10-08T21:04:00Z', p95_ms: 2 } } }, 'newer.md');
+  const b = records({ ...base, date: '2026-10-08', profiles: { low: { finished_at: '2026-10-08T21:03:00Z', p95_ms: 1 } } }, 'older.md');
+  assert.equal(mergeLatest([a, b]).get('low').source, 'newer.md');
+  const sep = records({ ...base, date: '2026-9-30', profiles: { low: {} } }, 'sep30.md');
+  const oct = records({ ...base, date: '2026-10-01', profiles: { low: {} } }, 'oct01.md');
+  assert.equal(mergeLatest([oct, sep]).get('low').source, 'oct01.md');
+});
+
+test('review: iteration-based load and blank strings are part of comparability', () => {
+  const it = { ...base, target_rate_rps: null, peak_vus: 10, executor: 'shared-iterations', iterations: 10 };
+  assert.equal(comparability(it, { ...it, iterations: 100000 }).status, 'not-like-for-like');
+  assert.equal(comparability({ ...base, environment: '' }, { ...base, environment: ' ' }).status, 'unconfirmed');
+});
+
+test('review: previous reports with no common profile are named, not "no previous report"', () => {
+  const res = compareRuns([{ source: 'prev.md', raw: { ...base, profiles: { high: base } } }], { ...base, profiles: { low: base } });
+  const md = toMarkdown(res);
+  assert.match(md, /prev\.md have no data for the profiles of this run \(LOW; previous profiles: HIGH\)/);
+});
+
+test('review: a delta just over the threshold is printed with 2 decimals', () => {
+  const md = toMarkdown(compareRuns([{ source: 'p', raw: { ...base, profiles: { low: base } } }], { ...base, profiles: { low: { ...base, p95_ms: 120.04 } } }));
+  assert.match(md, /\+20\.04% \| ⚠ regression/);
+});
+
+test('review: several --prev files must each have their own flag (helpful error)', () => {
+  const r = spawnSync(process.execPath, [SCRIPT, '--prev', 'a.md', 'b.md', '--curr', 'c.json'], { encoding: 'utf8' });
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /repeat --prev/);
 });

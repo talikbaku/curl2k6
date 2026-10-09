@@ -4,12 +4,15 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   unit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
       - run: npm test
@@ -17,14 +20,16 @@ jobs:
   e2e-demo:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
-      - uses: grafana/setup-k6-action@v1
+      - uses: grafana/setup-k6-action@43b9fc21641a76002687994433dd586f56e791b1 # v1.2.2
+        with:
+          k6-version: '1.5.0'
       - name: Demo — baseline vs. simulated bad release (LOW profile)
         run: bash examples/run-demo.sh low
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: demo-output
@@ -33,17 +38,17 @@ jobs:
   azure-pipelines-offline:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.12'
-      - run: pip install jsonschema pyyaml
+      - run: pip install jsonschema==4.23.0 pyyaml==6.0.2
       - name: Validate pipelines against the official Azure Pipelines schema
         run: |
-          curl -sSfL -o /tmp/service-schema.json https://raw.githubusercontent.com/microsoft/azure-pipelines-vscode/main/service-schema.json
+          curl -sSfL -o /tmp/service-schema.json https://raw.githubusercontent.com/microsoft/azure-pipelines-vscode/e8090fd525cd6ba47d7685c698f3f51983e298c6/service-schema.json
           python3 tests/azure/validate_schema.py /tmp/service-schema.json \
             plugins/curl2k6/skills/curl2k6/templates/azure-pipelines.yml examples/azure-pipelines.demo.yml
       - name: Emulate the demo pipeline job (installs k6 itself)

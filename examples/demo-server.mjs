@@ -17,9 +17,9 @@ const ERROR_RATE = SLOW ? 0.02 : 0.001;
 let inflight = 0;
 
 const server = http.createServer((req, res) => {
-  const url = new URL(req.url, `http://${req.headers.host}`);
+  const url = new URL(req.url, 'http://127.0.0.1'); // never parse the Host header (a malformed one would crash the demo)
   if (url.pathname === '/health') {
-    res.writeHead(200, { 'content-type': 'text/plain' }).end('ok');
+    res.writeHead(200, { 'content-type': 'text/plain' }).end(`ok slow=${SLOW ? 1 : 0}`);
     return;
   }
   if (req.method !== 'GET' || url.pathname !== '/items') {

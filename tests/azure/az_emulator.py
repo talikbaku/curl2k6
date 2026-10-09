@@ -36,10 +36,11 @@ def run_obj(rid):
     if r['status'] != 'completed' and r.get('pid'):
         try: os.kill(r['pid'], 0); alive = True
         except OSError: alive = False
-        done = os.path.exists(r['out']) and 'JOB ' in open(r['out']).read()
-        if done or not alive:
-            txt = open(r['out']).read()
-            r['status'] = 'completed'; r['result'] = 'succeeded' if 'JOB SUCCEEDED' in txt else 'failed'
+        txt = open(r['out']).read() if os.path.exists(r['out']) else ''
+        lines = [l for l in txt.splitlines() if l.strip()]
+        final = next((l for l in reversed(lines) if l in ('JOB SUCCEEDED', 'JOB FAILED')), None)
+        if final or not alive:
+            r['status'] = 'completed'; r['result'] = 'succeeded' if final == 'JOB SUCCEEDED' else 'failed'
             r['finishTime'] = iso(time.time())
             pub = [l.split(' ', 1)[1] for l in txt.splitlines() if l.startswith('published: ')]
             r['published'] = pub[0] if pub else None
@@ -76,7 +77,7 @@ if cmd.startswith('pipelines run') and not cmd.startswith('pipelines runs'):
     params = dict(x.split('=', 1) for x in (opt('--parameters', True) or []))
     if opt('--variables', True): open(LOG, 'a').write('  NOTE: --variables given (YAML vars would ignore it)\n')
     rid = str(len(st['runs']) + 101)
-    o = f'/tmp/azshim-run-{rid}.out'
+    o = os.path.join(os.path.dirname(os.path.abspath(STATE)), f'azshim-run-{rid}.out')
     proc = subprocess.Popen(['python3', '-I', AZRUN, p['yml'], os.getcwd()] + [f'{k}={v}' for k, v in params.items()],
                             stdout=open(o, 'w'), stderr=subprocess.STDOUT, start_new_session=True)
     st['runs'][rid] = {'pid': proc.pid, 'out': o, 'status': 'notStarted', 'queued': time.time(), 'name': n,

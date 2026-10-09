@@ -3,7 +3,8 @@
 // It is templates/test-template.js filled in, with short demo profiles (15 s each) so the
 // demo finishes in about two minutes. Real profiles are minutes long — see the template.
 //
-// Run: k6 run -e LOAD_PROFILE=low -e TARGET_ENV=local -e OUT_DIR=out examples/items-test.js
+// Run: mkdir -p out && k6 run -e LOAD_PROFILE=low -e TARGET_ENV=local -e OUT_DIR=out examples/items-test.js
+//      (k6 does not create OUT_DIR — without the mkdir the summary files are silently not written)
 
 import http from 'k6/http';
 import { check } from 'k6';
@@ -36,6 +37,7 @@ export const options = {
   },
   summaryTrendStats: ['avg', 'med', 'p(90)', 'p(95)', 'p(99)', 'max'],
   thresholds: {
+    http_reqs: ['count>0'],
     items_success: ['rate>0.99'],
     items_latency_2xx: ['p(95)<300'],
   },
@@ -49,7 +51,7 @@ const http4xx = new Counter('items_4xx');
 const http5xx = new Counter('items_5xx');
 
 export default function () {
-  const params = { headers: { Accept: 'application/json' }, timeout: '2s', tags: { endpoint: ENDPOINT } };
+  const params = { headers: { Accept: 'application/json' }, timeout: '2s', tags: { endpoint: ENDPOINT, name: ENDPOINT } };
   const res = http.get(`${BASE_URL}/items?limit=20`, params);
 
   latency.add(res.timings.duration);

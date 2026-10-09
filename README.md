@@ -25,7 +25,7 @@ Writing the script is the easy part. What goes wrong in real load testing is eve
 - **Missing data stays missing.** Unknown values are `null` / `n/a` — never silently 0.
 - **Production safety is not optional.** Read-only by default, a separate explicit confirmation for every production run, automatic stop when results look like an incident rather than load degradation, no "one more run to double-check".
 - **Battle-tested gotchas:** "launcher" CI jobs that go green before k6 finishes, stale profile variables (LOW silently running as HIGH), Datadog nanoseconds vs. seconds, `text` vs `.keyword` in Elasticsearch, `jslib.k6.io` blocked in CI.
-- **Secrets never leave env vars.** Tokens from your curl are never written into tests, commits, reports or prompts.
+- **Secrets never leave env vars.** Tokens from your curl are never written into tests, commits, reports or prompts; the Azure template scrubs them from published logs, the test redacts them from diagnostics, and pipeline parameters can't inject commands.
 
 ## What a report looks like
 
@@ -76,14 +76,14 @@ cp plugins/curl2k6/agents/curl2k6-runner.md ~/.claude/agents/
 — stage, LOW/MEDIUM/HIGH, report to load-reports/ and Confluence
 ```
 
-Or just paste a curl and ask for a load test. Later, *"we shipped a release — re-run the load test and tell me if it got slower"* (in any language) picks up the existing test and the last report. Claude asks what it needs in one block (repo, environment, local or CI, metrics backends, profiles, report destination, where tokens live), shows the draft test, opens an MR, finds the previous report, runs the profiles, and writes the report. On CI, the long part runs in the background via the `curl2k6-runner` agent.
+(`/curl2k6:curl2k6` if another installed skill is also called `curl2k6`.) Or just paste a curl and ask for a load test. Later, *"we shipped a release — re-run the load test and tell me if it got slower"* (in any language) picks up the existing test and the last report. Claude asks what it needs in one block (repo, environment, local or CI, metrics backends, profiles, report destination, where tokens live), shows the draft test, opens an MR, finds the previous report, runs the profiles, and writes the report. On CI, the long part runs in the background via the `curl2k6-runner` agent.
 
 **Gate a pipeline on regressions:**
 ```bash
 node plugins/curl2k6/skills/curl2k6/scripts/compare.mjs \
   --prev load-reports/items-api-2026-10-01-stage.md --curr out/raw.json --format text --fail-on-regression
 ```
-`--format text` prints an aligned, coloured table for CI logs; the default `md` is the report section.
+`--format text` prints an aligned table for CI logs (coloured on a TTY or with `FORCE_COLOR=1` — set it in CI); the default `md` is the report section.
 
 ## Supported
 

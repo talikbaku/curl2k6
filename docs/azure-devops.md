@@ -1,6 +1,6 @@
 # curl2k6 on Azure DevOps — first real run
 
-What's already verified offline: both pipelines pass Microsoft's Azure Pipelines schema, their steps run correctly in a job emulator, and Claude Code with the plugin drives an emulated `az` correctly end to end (creates the pipeline, selects the profile with runtime parameters, polls, downloads the artifact, compares). What only a real run can show: agents, permissions/approvals, the artifacts service. This page is the checklist for that run.
+Verified on a real Azure DevOps organization: the demo pipeline on a Microsoft-hosted agent, and a LOW + MEDIUM API run on an autoscaled self-hosted pool with a variable-group secret, reported to the repo and the Azure DevOps Wiki. The offline checks in `tests/azure/` (official schema, job emulator, `az` emulator) remain. Use this checklist for your organization's first run — agents, permissions and policies differ per organization.
 
 ## 1. Prerequisites (on the machine where Claude Code runs)
 
@@ -35,7 +35,7 @@ In the repo of the service you want to cover:
 self-hosted pool <pool>, environment <env>, profiles LOW then MEDIUM, report to load-reports/ and Confluence space <space> under <parent page>
 ```
 What to watch:
-- it adds `load/azure-pipelines.yml` from the template, commits and **pushes** before `az pipelines create` (Azure runs the remote branch);
+- it adds `load/azure-pipelines.yml` from the template with `ALLOWED_HOSTS` set to the host from your curl (anyone who can only queue runs then can't point the key at another host), commits and **pushes** before `az pipelines create` (Azure runs the remote branch);
 - `az pipelines run ... --parameters profile=low` — parameters, never `--variables`;
 - the first run of a new pipeline that uses a **variable group** waits in `notStarted` (timeline: `Checkpoint.Authorization`) until the group is permitted for the pipeline — approve it in the UI ("Permit"); Claude shouldn't queue a second run or grant access to a shared secret store on its own. A pool the team already uses needed no approval;
 - crossed k6 thresholds make the run red by default (`onThresholds=fail`; the first real run, with exit 99 tolerated, was green with 100% 4xx) — the artifact is still published; either way Claude checks `success_rate` and, if it is low, finds the status code with a smoke run before the next profile;

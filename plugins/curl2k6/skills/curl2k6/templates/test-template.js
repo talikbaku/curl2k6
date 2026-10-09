@@ -1,9 +1,11 @@
 // Generated with the curl2k6 skill (Claude Code). To re-run, compare with the previous report or
 // change profiles, ask Claude to use curl2k6 — reports and comparisons come from its scripts.
 //
-// Run:  mkdir -p <out> && k6 run -e LOAD_PROFILE=low -e TARGET_ENV=<env> -e GIT_SHA=$(git rev-parse --short HEAD) \
-//         -e OUT_DIR=<out> [-e BASE_URL=...] [-e API_TOKEN=...] <name>.js | tee <out>/k6-low.log
-// Secrets come from the environment (-e / CI variables) — never hardcode a token from the curl.
+// Run:  set -o pipefail; mkdir -p <out> && k6 run -e LOAD_PROFILE=low -e TARGET_ENV=<env> -e GIT_SHA=$(git rev-parse --short HEAD) \
+//         -e OUT_DIR=<out> [-e BASE_URL=...] <name>.js 2>&1 | tee <out>/k6-low.log; echo "k6 exit: ${PIPESTATUS[0]}"
+// Secrets come from the environment: `export API_TOKEN=...` in your own terminal (or a CI secret mapped to env) —
+// k6 reads it as __ENV.API_TOKEN. Never put a token on the command line, in the script, or in a URL query string
+// (k6 prints full request URLs in its own warnings, and those logs end up in artifacts).
 //
 // (Skeleton notes for the skill — delete this block in the generated test: replace every <PLACEHOLDER>,
 //  keep the structure; if the repo already has load tests, mirror their conventions instead.)
@@ -22,6 +24,7 @@ const BODY = null; // request body from the curl, e.g. JSON.stringify({ ... }) �
 
 // Agreed load profiles. Size them to what the service can plausibly take — ask, don't guess big.
 const PROFILES = {
+  smoke:  { stages: [{ target: 1,  duration: '20s' }] },   // proves the target answers before a real profile
   low:    { stages: [{ target: 5,  duration: '4m' }, { target: 5,  duration: '1m' }, { target: 0, duration: '30s' }] },
   medium: { stages: [{ target: 20, duration: '5m' }, { target: 20, duration: '1m' }, { target: 0, duration: '30s' }] },
   high:   { stages: [{ target: 50, duration: '6m' }, { target: 50, duration: '1m' }, { target: 0, duration: '30s' }] },
@@ -41,6 +44,7 @@ export const options = {
   },
   summaryTrendStats: ['avg', 'med', 'p(90)', 'p(95)', 'p(99)', 'max'], // k6 has no p(99) by default
   thresholds: {
+    http_reqs: ['count>0'],             // a run in which no request was sent must not pass
     '<prefix>_success': ['rate>0.99'],
     '<prefix>_latency_2xx': ['p(95)<500'],
   },
@@ -56,7 +60,13 @@ const http5xx = new Counter('<prefix>_5xx');
 
 // const pool = new SharedArray('ids', () => JSON.parse(open('./<pool>.json')));
 
-let shown = 0; // diagnostics: first non-2xx responses of this VU (a run can be green with 100% 4xx)
+let shown = 0; // diagnostics: first non-2xx responses of this VU (a run with 100% 4xx must be explainable)
+// redact secret values (and each item of a comma-separated list) before anything is logged
+const SECRETS = [__ENV.API_TOKEN].filter(Boolean).flatMap((v) => [v, ...v.split(',')]).map((v) => v.trim()).filter((v) => v.length >= 6);
+const redact = (text) => SECRETS.reduce((t, v) => t.split(v).join('***'), String(text));
+// a body is untrusted: redact the WHOLE body before cutting (a secret straddling the cut would leak), and
+// neutralise CI logging commands (##vso[...] / ##[...]) so a response can't drive the CI agent
+const safeBody = (body) => redact(String(body || '')).replace(/##(vso)?\[/g, '#_$1[').slice(0, 200);
 
 export default function () {
   // const id = pool[Math.floor(Math.random() * pool.length)];
@@ -66,7 +76,7 @@ export default function () {
       // <other headers from the curl, minus secrets>
     },
     timeout: '10s',
-    tags: { endpoint: ENDPOINT },
+    tags: { endpoint: ENDPOINT, name: ENDPOINT }, // `name` replaces the full URL in metric tags (no query strings in metrics backends)
   };
   const res = http.request('<METHOD>', `${BASE_URL}<path>`, BODY, params);
 
@@ -79,7 +89,7 @@ export default function () {
   else if (res.status >= 500) http5xx.add(1);
   if (!ok && shown < 3) { // status + start of the body of a non-2xx response; never log a 2xx body or a secret
     shown += 1;
-    console.warn(`diag status=${res.status} error_code=${res.error_code} body=${String(res.body || '').slice(0, 200)}`);
+    console.warn(`diag status=${res.status} error_code=${res.error_code} body=${safeBody(res.body)}`);
   }
   check(res, { '2xx': () => ok });
 }

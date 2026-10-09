@@ -19,15 +19,29 @@ const r2 = (x) => (x === null || x === undefined || Number.isNaN(x) ? null : Mat
 const r6 = (x) => (x === null || x === undefined || Number.isNaN(x) ? null : Math.round(x * 1e6) / 1e6);
 
 // one input file -> one or more summaries (JSON file, or K6_SUMMARY_JSON lines in a log)
-export function readSummaries(text, source = 'input') {
-  const t = text.trim();
-  if (t.startsWith('{')) return [JSON.parse(t)];
-  const found = [];
-  for (const line of text.split(/\r?\n/)) {
-    const i = line.indexOf('K6_SUMMARY_JSON {');
-    if (i !== -1) found.push(JSON.parse(line.slice(i + 'K6_SUMMARY_JSON '.length).trim()));
+// Lines that look like a summary but don't parse (a truncated line, a shell trace, an error body that
+// quotes the marker) are skipped with a warning; it fails only when nothing usable is found.
+export function readSummaries(text, source = 'input', warn = (m) => process.stderr.write(`to-raw: ${m}\n`)) {
+  const t = text.replace(/^\uFEFF/, '').trim();
+  if (t.startsWith('{')) {
+    try {
+      const one = JSON.parse(t);
+      if (one && one.metrics) return [one];
+    } catch { /* not a single JSON document (e.g. k6 --log-format json) — scan lines below */ }
   }
-  if (!found.length) throw new Error(`${source}: neither a summary JSON file nor a log with K6_SUMMARY_JSON lines`);
+  const found = [];
+  text.split(/\r?\n/).forEach((line, n) => {
+    const i = line.indexOf('K6_SUMMARY_JSON {');
+    if (i === -1) return;
+    try {
+      const s = JSON.parse(line.slice(i + 'K6_SUMMARY_JSON '.length).trim());
+      if (s && s.metrics && s.meta) found.push(s);
+      else warn(`${source}:${n + 1}: K6_SUMMARY_JSON without meta/metrics — skipped`);
+    } catch {
+      warn(`${source}:${n + 1}: K6_SUMMARY_JSON line is not valid JSON (truncated?) — skipped`);
+    }
+  });
+  if (!found.length) throw new Error(`${source}: neither a k6 summary JSON file nor a log with a valid K6_SUMMARY_JSON line`);
   return found;
 }
 
@@ -50,14 +64,17 @@ export function profileFromSummary(summary) {
 
   let requests = null;
   let successRate = null;
+  let successes = null;
   if (mm.success && vals(mm.success)) {
     const v = vals(mm.success);
     requests = (v.passes ?? 0) + (v.fails ?? 0);
     successRate = v.rate ?? null;
+    successes = v.passes ?? null;
   } else if (vals('http_req_failed')) {
     const v = vals('http_req_failed');
     requests = vals('http_reqs') ? vals('http_reqs').count : (v.passes ?? 0) + (v.fails ?? 0);
     successRate = v.rate === undefined ? null : 1 - v.rate;
+    successes = v.fails ?? null; // http_req_failed: "fails" are the successful requests
     if (mm.success) derived.push(`success metric "${mm.success}" missing — used 1 - http_req_failed`);
   }
 
@@ -77,12 +94,20 @@ export function profileFromSummary(summary) {
     }
   }
 
+  if (requests === 0) {
+    successRate = null;
+    derived.push('no requests were sent — success rate unknown (check the test: iterations may fail before the request)');
+  }
+  const no2xx = successes === 0;
+  if (no2xx) derived.push('no successful (2xx) responses — 2xx latency unknown');
+
   const plan = meta.plan || {};
   const vus = vals('vus') || {};
   return {
     executor: plan.executor ?? null,
     target_rate_rps: plan.target_rate_rps ?? null,
     peak_vus: plan.peak_vus ?? null,
+    iterations: plan.iterations ?? null,
     vus_max_observed: vus.max ?? null,
     started_at: meta.finished_at ? isoMinus(meta.finished_at, summary.test_run_duration_ms) : null,
     finished_at: meta.finished_at ?? null,
@@ -97,8 +122,8 @@ export function profileFromSummary(summary) {
     timeouts: counter('timeouts'),
     http_4xx: counter('http_4xx'),
     http_5xx: counter('http_5xx'),
-    p95_ms_2xx: r2(lat2xx['p(95)']),
-    p99_ms_2xx: r2(lat2xx['p(99)']),
+    p95_ms_2xx: no2xx ? null : r2(lat2xx['p(95)']),
+    p99_ms_2xx: no2xx ? null : r2(lat2xx['p(99)']),
     thresholds_passed: thresholdsFailed.length === 0,
     thresholds_failed: thresholdsFailed,
     derived,
@@ -125,7 +150,7 @@ export function buildRaw(summaries, { commit } = {}) {
   }
   const m0 = metas[0];
   const dates = metas.map((m) => (m.date || m.finished_at || '').slice(0, 10)).filter(Boolean).sort();
-  const unsorted = {};
+  const unsorted = Object.create(null);
   summaries.forEach((s, i) => {
     const key = String(metas[i].profile || `run${i + 1}`).toLowerCase();
     if (unsorted[key]) throw new Error(`profile "${key}" given twice`);
@@ -140,7 +165,12 @@ export function buildRaw(summaries, { commit } = {}) {
   const profiles = Object.fromEntries(
     keys.map((k, i) => [k, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([k]) => [k, unsorted[k]])
   );
-  return {
+  const warnings = [];
+  for (const [key, label] of [['script_commit', 'script commit'], [null, 'latency metric']]) {
+    const vals = new Set(metas.map((m) => (key ? m[key] : m.metrics && m.metrics.latency) ?? null));
+    if (vals.size > 1) warnings.push(`profiles were run with different ${label}s (${[...vals].join(', ')}) — the report records the first one`);
+  }
+  const raw = {
     test: m0.test ?? null,
     date: dates.length ? dates[dates.length - 1] : null,
     environment: m0.environment ?? null,
@@ -149,6 +179,8 @@ export function buildRaw(summaries, { commit } = {}) {
     latency_metric: (m0.metrics && m0.metrics.latency) || 'http_req_duration',
     profiles,
   };
+  Object.defineProperty(raw, 'warnings', { value: warnings, enumerable: false });
+  return raw;
 }
 
 const show = (v, suffix = '') => (v === null || v === undefined ? 'n/a' : `${v}${suffix}`);
@@ -217,6 +249,7 @@ function main(argv) {
   }
   try {
     const raw = buildRaw(files.flatMap((f) => readSummaries(readFileSync(f, 'utf8'), f)), { commit });
+    for (const w of raw.warnings) console.error(`to-raw: warning: ${w}`);
     if (format === 'json') {
       console.log(JSON.stringify(raw, null, 2));
     } else {

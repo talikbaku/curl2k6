@@ -37,17 +37,21 @@ curl2k6/
 │   └── skills/curl2k6/
 │       ├── SKILL.md                       ← the skill itself: questions, test draft, rules
 │       ├── templates/
-│       │   ├── test-template.js           ← k6 test skeleton
+│       │   ├── test-template.js           ← k6 test skeleton (smoke/low/medium/high)
 │       │   ├── summary.js                 ← monitoring-independent k6 run summary + planOf()
-│       │   └── report.md                  ← report template
+│       │   ├── report.md                  ← report template
+│       │   └── azure-pipelines.yml        ← Azure DevOps pipeline (runtime parameters, artifact)
 │       ├── scripts/
-│       │   ├── to-raw.mjs                 ← summaries → results tables + Raw numbers block
+│       │   ├── to-raw.mjs                 ← summaries/logs → results + Runs tables + Raw numbers block
 │       │   └── compare.mjs                ← deterministic comparison with the previous report
 │       └── references/
-│           └── metrics-backends.md        ← query recipes for metrics backends
-├── examples/                              ← local demo: demo service, test, example reports
-├── tests/                                 ← unit tests for the scripts (node --test)
-└── docs/GUIDE.md                          ← this guide
+│           ├── metrics-backends.md        ← query recipes for metrics backends
+│           └── ci-azure-devops.md         ← Azure DevOps recipe (az commands, traps, wiki)
+├── examples/                              ← local demo: demo service, test, example reports, Azure demo pipeline
+├── tests/                                 ← unit tests (node --test) · azure/ — offline Azure Pipelines checks
+├── docs/GUIDE.md                          ← this guide
+├── docs/azure-devops.md                   ← first-run checklist for Azure DevOps
+└── CHANGELOG.md
 ```
 
 **Who does what:**
@@ -84,7 +88,7 @@ You need **both** the skill and the agent for CI runs: the skill hands the run o
 ### It can't / won't
 
 - **Run anything without your confirmation** of the draft — and on production, without a separate confirmation for every run.
-- **Set up CI from scratch.** If the repo has no load-test pipeline, Claude will suggest running locally or help you write a pipeline — but that is separate work, not automatic.
+- **Set up CI from scratch — except on Azure DevOps.** On Azure DevOps it adds `azure-pipelines.yml` from the bundled template and creates the pipeline (after your confirmation). For other CIs it suggests a local run or helps you write a pipeline as separate work.
 - **Create tokens or ask you to paste them into the chat.** Tokens must already be somewhere it can read them from (git remote, environment variable).
 - **Guess its way into a metrics system that isn't on the list.** For those you get the k6 summary only.
 - **Make decisions for you** after the report: it won't do "one more run to double-check" or file bugs on its own.
@@ -127,7 +131,7 @@ In Claude Code:
 /plugin marketplace add <your-github-username>/curl2k6
 /plugin install curl2k6@curl2k6
 ```
-Restart Claude Code if prompted. The skill is called `/curl2k6:curl2k6`, the agent `curl2k6:curl2k6-runner`.
+Restart Claude Code if prompted. The skill is invoked as `/curl2k6` (or `/curl2k6:curl2k6` if another skill has the same name); the agent is `curl2k6:curl2k6-runner`. You can also skip the slash command and just describe the task.
 
 **Updates:** `/plugin marketplace update curl2k6`.
 
@@ -196,12 +200,13 @@ Claude asks its questions in one block. What it will ask and how to answer:
 | 1 | curl / endpoint description | already given | — required |
 | 2 | Repo / folder for the test | `~/work/my-load-tests` | It suggests creating a folder |
 | 3 | Production or not | "stage" | It infers from the URL and **asks again**; production needs a separate confirmation |
-| 4 | Where to run | locally / GitLab CI / GitHub Actions / Jenkins | It first looks in the repo (`.gitlab-ci.yml`, `.github/workflows`, `Jenkinsfile`) |
+| 4 | Where to run | locally / GitLab CI / GitHub Actions / Jenkins / Azure DevOps | It first looks in the repo (`.gitlab-ci.yml`, `.github/workflows`, `Jenkinsfile`, `azure-pipelines.yml`) |
 | 5 | Where to get metrics + **where k6 actually runs** | "Grafana at grafana.company.com, token in `GRAFANA_TOKEN`; k6 runs in a k8s pod" | It first looks for hints in the repo (`PROMETHEUS_URL`, `DD_SITE`, Grafana/Kibana links in README, helm, CI) and tells you what it found |
 | 6 | Load profiles | "defaults" or your own numbers | It suggests 3 tiers but **won't pick large numbers blindly** — it asks about SLOs / previous results |
 | 7 | Open an MR/PR? | "yes" | Yes by default |
 | 8 | Where to put the report | "md in `reports/`, and Confluence, space QA, under the page 'Load tests'" | Markdown file only if there's no wiki connector — and it tells you so |
-| 9 | How to get tokens | "token in the git remote URL" / "`GITLAB_TOKEN`" | It will **never** ask you to paste a token into the chat |
+| 9 | How to get tokens | "token in the git remote URL" / "`GITLAB_TOKEN`" / "variable group in Azure Library" | It will **never** ask you to paste a token into the chat |
+| 10 | Regression thresholds | "defaults" | Defaults: p95/p99 worse by >20%, success rate down by >1 pp, timeout share up by >0.1 pp |
 
 Why "where does k6 actually run" matters: if the CI job only *launches* k6 somewhere else (e.g. in a Kubernetes pod), a green CI job **does not mean** the test has finished, and the final numbers won't be in the CI log. Claude needs to know where to look for them.
 
@@ -362,7 +367,8 @@ Before the run Claude tells you which report (files) will be the baseline, with 
    | Timeout share (timeouts ÷ requests) | up by **more than 0.1 percentage point** |
 
    "Success rate" = share of requests the test counts as successful (normally 2xx). Timeouts are shown both as a count and as a share.
-   Non-comparable runs — flags marked "(not like-for-like)"; unconfirmed — "(unconfirmed)"; in both cases the overall verdict does **not** call it a regression.
+   Non-comparable runs — flags marked "(not like-for-like)"; unconfirmed — "(unconfirmed)" (in both the markdown and the `--format text` output); in both cases the overall verdict does **not** call it a regression.
+7. **Input is validated.** A previous report parsed by hand must use JSON numbers, `success_rate` as a fraction 0..1, and `null` for unknowns. Strings like `"1,234"` or `"99.5%"`, or a file that isn't a curl2k6 raw file (e.g. a k6 `summary.json`), make `compare.mjs` exit 2 with the reason instead of silently printing ✓ or "Baseline run".
 6. **Caveat** for production and shared stage environments (stage is treated as shared unless you say it's dedicated): results depend on concurrent traffic; one difference is a signal, not proof; re-run before concluding a regression. (From real experience: two runs of the same test on production a day apart gave MEDIUM p95 of ~4.3 s and ~0.5 s.)
 
 ### How this was verified
@@ -378,7 +384,7 @@ Earlier (v1.1) the same rules were tested with separate runs following the skill
 | Different environments / profiles | "not like-for-like" label | ✅ |
 | Finding the previous report in a folder with 100+ reports of different tests, similar names, "production vs stage" trap | Picking the right files; baseline for a new test | ✅ (after a fix) |
 | `Raw numbers` block of a new report | Reads back without loss | ✅ |
-| v1.2: `compare.mjs` / `to-raw.mjs` unit tests | All rules above as code | ✅ 35 tests |
+| v1.2: `compare.mjs` / `to-raw.mjs` / `summary.js` unit tests | All rules above as code, plus the cases found by the independent review | ✅ `npm test` |
 | v1.2: local end-to-end demo | k6 → summaries → tables → comparison against the previous **markdown** report → regression flags | ✅ `examples/reports/` |
 
 ---
@@ -426,10 +432,10 @@ Proven in practice on GitLab CI. GitHub Actions and Jenkins follow the same gene
 
 ### Azure DevOps
 
-Dedicated support: `templates/azure-pipelines.yml` (runtime parameter `profile` with `values: [low, medium, high]`, k6 install, run, artifact `curl2k6-<profile>`) and `references/ci-azure-devops.md` (the `az` commands Claude uses). Azure-specific traps it handles:
+Dedicated support: `templates/azure-pipelines.yml` (runtime parameter `profile` with `values: [smoke, low, medium, high]`, `onThresholds` fail|warn, checksum-verified k6 install, parameters passed as validated env vars with every `$` stripped, `baseUrl` limited to `ALLOWED_HOSTS` set in the YAML, secrets scrubbed from every published file, artifact `curl2k6-<profile>`) and `references/ci-azure-devops.md` (the `az` commands Claude uses). Azure-specific traps it handles:
 - **A variable from the YAML `variables:` block can't be overridden at queue time** — `--variables LOAD_PROFILE=high` is silently ignored. Profiles are selected with runtime parameters (`az pipelines run --parameters profile=high`), and the downloaded summary's `meta.profile` is checked against the request.
 - Azure runs the YAML and the test **from the remote branch** — push before creating/running the pipeline.
-- Microsoft-hosted agents reach only public URLs; internal services need a self-hosted pool.
+- Microsoft-hosted agents reach only public URLs — and even a public API may IP-allowlist them (observed: Cloudflare `403 Your IP address is not allowed`); use the pool the team's other pipelines use. Internal services need a self-hosted pool.
 - A new pipeline may wait for a permission approval on first use (`notStarted`) — approve in the UI, don't queue again.
 - Secret variables must be mapped into the step's `env:` explicitly.
 

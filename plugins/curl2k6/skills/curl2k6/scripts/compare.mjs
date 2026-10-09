@@ -20,7 +20,11 @@
 //     planned duration; secondary = script commit, executor, latency metric, test name
 //   - flags on non-comparable / unconfirmed profiles are labelled and never count as a regression
 //
-// Exit codes: 0 ok, 1 regression found and --fail-on-regression given, 2 bad input.
+// Inputs are validated: "profiles" must be a non-empty object, numeric fields must be numbers or null
+// (a hand-parsed "1,234" or "99.5%" is an error, not a silent ✓), success_rate is a fraction 0..1.
+//
+// Exit codes: 0 ok, 1 regression found and --fail-on-regression given, 2 bad input
+// (stderr says which: no Raw numbers section / not a curl2k6 raw file / bad field / bad argument).
 
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -30,17 +34,57 @@ const EPS = 1e-9;
 const DEDICATED_ENVS = new Set(['local', 'localhost']);
 
 export class NoRawBlockError extends Error {}
+export class BadInputError extends Error {}
 
 // ---------- input ----------
 
+const NUM_FIELDS = ['target_rate_rps', 'peak_vus', 'iterations', 'vus_max_observed', 'duration_s', 'planned_duration_s',
+  'requests', 'success_rate', 'p50_ms', 'p95_ms', 'p99_ms', 'max_ms', 'timeouts', 'http_4xx', 'http_5xx', 'p95_ms_2xx', 'p99_ms_2xx'];
+const isObj = (o) => o !== null && typeof o === 'object' && !Array.isArray(o);
+
+export function validateRaw(raw, source = 'input') {
+  if (!isObj(raw) || !isObj(raw.profiles) || !Object.keys(raw.profiles).length) {
+    throw new BadInputError(`${source}: not a curl2k6 raw file — needs a non-empty "profiles" object (pass raw.json from to-raw.mjs, or a report with a Raw numbers block; a k6 summary.json is not one)`);
+  }
+  for (const [name, p] of Object.entries(raw.profiles)) {
+    if (!isObj(p)) throw new BadInputError(`${source}: profiles.${name} must be an object`);
+    for (const f of NUM_FIELDS) {
+      const v = p[f];
+      if (v === null || v === undefined) continue;
+      if (typeof v !== 'number' || !Number.isFinite(v)) {
+        throw new BadInputError(`${source}: profiles.${name}.${f} must be a number or null, got ${JSON.stringify(v)}`);
+      }
+      if (v < 0) throw new BadInputError(`${source}: profiles.${name}.${f} must be >= 0, got ${v}`);
+    }
+    if (typeof p.success_rate === 'number' && p.success_rate > 1) {
+      throw new BadInputError(`${source}: profiles.${name}.success_rate must be a fraction 0..1 (got ${p.success_rate} — a percentage?)`);
+    }
+  }
+  return raw;
+}
+
+// the JSON block inside the "Raw numbers" section only (up to the next heading of the same or higher
+// level); with several such sections, the one titled "... for future comparisons" wins, else the last
 export function extractRaw(text, source = 'input') {
-  const trimmed = text.trim();
-  if (trimmed.startsWith('{')) return JSON.parse(trimmed);
-  const idx = text.search(/^#{1,6}\s*Raw numbers/im);
-  if (idx === -1) throw new NoRawBlockError(`${source}: no "Raw numbers" section`);
-  const m = text.slice(idx).match(/```json\s*\n([\s\S]*?)```/);
+  const t = text.replace(/^\uFEFF/, '');
+  const trimmed = t.trim();
+  if (trimmed.startsWith('{')) return validateRaw(JSON.parse(trimmed), source);
+  const lines = t.split(/\r?\n/);
+  const heads = [];
+  let fenced = false;
+  lines.forEach((l, i) => {
+    if (/^\s*```/.test(l)) fenced = !fenced;
+    const m = !fenced && l.match(/^(#{1,6})\s+(.*?)\s*$/);
+    if (m) heads.push({ i, level: m[1].length, title: m[2] });
+  });
+  const rawHeads = heads.filter((h) => /^raw numbers\b/i.test(h.title));
+  if (!rawHeads.length) throw new NoRawBlockError(`${source}: no "Raw numbers" section`);
+  const h = rawHeads.find((x) => /future comparisons/i.test(x.title)) || rawHeads[rawHeads.length - 1];
+  const next = heads.find((x) => x.i > h.i && x.level <= h.level);
+  const section = lines.slice(h.i + 1, next ? next.i : lines.length).join('\n');
+  const m = section.match(/```json[^\n]*\n([\s\S]*?)```/);
   if (!m) throw new NoRawBlockError(`${source}: "Raw numbers" section has no json block`);
-  return JSON.parse(m[1]);
+  return validateRaw(JSON.parse(m[1]), source);
 }
 
 // flatten a raw report into per-profile records carrying the top-level fields
@@ -50,19 +94,27 @@ export function records(raw, source) {
   return Object.entries(raw.profiles || {}).map(([profile, p]) => ({ ...top, ...p, profile: profile.toLowerCase(), source }));
 }
 
-// several previous files (one per profile is common): the most recent record per profile wins
+// several previous files (one per profile is common): the most recent record per profile wins —
+// by the run's finished_at (k6 time), falling back to the report date; on a tie the later file given wins
+const runTime = (r) => {
+  for (const v of [r.finished_at, r.date]) {
+    const t = Date.parse(v ?? '');
+    if (!Number.isNaN(t)) return t;
+  }
+  return -Infinity;
+};
 export function mergeLatest(recordLists) {
   const best = new Map();
   for (const r of recordLists.flat()) {
     const cur = best.get(r.profile);
-    if (!cur || String(r.date || '') >= String(cur.date || '')) best.set(r.profile, r);
+    if (!cur || runTime(r) >= runTime(cur)) best.set(r.profile, r);
   }
   return best;
 }
 
 // ---------- comparability ----------
 
-const known = (v) => v !== null && v !== undefined && !(typeof v === 'number' && Number.isNaN(v));
+const known = (v) => v !== null && v !== undefined && !(typeof v === 'number' && Number.isNaN(v)) && !(typeof v === 'string' && v.trim() === '');
 const normEndpoint = (e) => (known(e) ? String(e).trim().replace(/\s+/g, ' ').replace(/^(\w+)/, (m) => m.toUpperCase()) : null);
 const normEnv = (e) => (known(e) ? String(e).trim().toLowerCase() : null);
 export const normTest = (t) =>
@@ -87,6 +139,9 @@ export function comparability(prev, curr) {
   if (pr && cr) core('target rate (req/s)', prev.target_rate_rps, curr.target_rate_rps, numEq);
   else if (!pr && !cr) core('peak VUs', prev.peak_vus, curr.peak_vus, numEq);
   else unknown.push('profile load (one run has a target rate, the other does not)');
+
+  // iteration-based executors (shared-iterations / per-vu-iterations): the iteration count is the load
+  if (known(prev.iterations) || known(curr.iterations)) core('iterations', prev.iterations, curr.iterations, numEq);
 
   core('planned duration (s)', prev.planned_duration_s, curr.planned_duration_s, numEq);
 
@@ -113,17 +168,17 @@ function pctChange(a, b) {
 export function compareProfile(prev, curr, th = DEFAULT_THRESHOLDS) {
   const comp = comparability(prev, curr);
   const rows = [];
-  const add = (metric, p, c, delta, unit, isRegression) => {
+  const add = (metric, p, c, delta, unit, isRegression, limit) => {
     const flag = delta === null ? null : isRegression ? 'regression' : 'ok';
-    rows.push({ metric, previous: known(p) ? p : null, current: known(c) ? c : null, delta, unit, flag });
+    rows.push({ metric, previous: known(p) ? p : null, current: known(c) ? c : null, delta, unit, flag, limit });
   };
 
   const sr = known(prev.success_rate) && known(curr.success_rate) ? (curr.success_rate - prev.success_rate) * 100 : null;
-  add('success rate', prev.success_rate, curr.success_rate, sr, 'pp', sr !== null && -sr > th.successPp + EPS);
+  add('success rate', prev.success_rate, curr.success_rate, sr, 'pp', sr !== null && -sr > th.successPp + EPS, th.successPp);
 
   for (const [key, label, limit] of [['p95_ms', 'p95 ms', th.p95], ['p99_ms', 'p99 ms', th.p99]]) {
     const d = pctChange(prev[key], curr[key]);
-    add(label, prev[key], curr[key], d, '%', d !== null && d > limit + EPS);
+    add(label, prev[key], curr[key], d, '%', d !== null && d > limit + EPS, limit);
   }
 
   const share = (r) => (known(r.timeouts) && known(r.requests) && r.requests > 0 ? (r.timeouts / r.requests) * 100 : null);
@@ -157,7 +212,10 @@ export function compareRuns(prevRaws, currRaw, opts = {}) {
   const env = normEnv(currRaw.environment);
   const caveat = !(opts.dedicated || DEDICATED_ENVS.has(env));
   const confirmed = profiles.flatMap((p) => (p.confirmed || []).map((m) => `${p.profile.toUpperCase()} ${m}`));
-  return { thresholds: th, profiles, confirmed_regressions: confirmed, caveat };
+  const currNames = new Set(profiles.map((p) => p.profile));
+  const previous_only = [...prevBy.keys()].filter((k) => !currNames.has(k));
+  const previous_sources = prevRaws.map((p) => p.source);
+  return { thresholds: th, profiles, confirmed_regressions: confirmed, caveat, previous_sources, previous_only };
 }
 
 // ---------- output ----------
@@ -165,12 +223,21 @@ export function compareRuns(prevRaws, currRaw, opts = {}) {
 const fmtNum = (v) => (v === null ? 'n/a' : String(Math.round(v * 100) / 100));
 const fmtRate = (v) => (v === null ? 'n/a' : `${(Math.round(v * 10000) / 100).toFixed(2)}%`);
 const sign = (v, digits) => (v === null ? 'n/a' : `${v > 0 ? '+' : v < 0 ? '−' : '±'}${Math.abs(v).toFixed(digits)}`);
+// one decimal, two when the value is within 0.05 of its threshold (so "+20.04%" doesn't print as "+20.0%")
+const pctDigits = (r) => (r.limit !== undefined && r.delta !== null && Math.abs(Math.abs(r.delta) - r.limit) < 0.05 ? 2 : 1);
+const suffixFor = (status) => (status === 'not-like-for-like' ? ' (not like-for-like)' : status === 'unconfirmed' ? ' (unconfirmed)' : '');
+function baselineText(result) {
+  if (!result.previous_sources || !result.previous_sources.length) return 'Baseline run — no previous report to compare with.\n';
+  const curr = result.profiles.map((p) => p.profile.toUpperCase()).join(', ');
+  const prev = (result.previous_only || []).map((p) => p.toUpperCase()).join(', ') || 'none';
+  return `Previous report(s) ${result.previous_sources.join(', ')} have no data for the profiles of this run (${curr}; previous profiles: ${prev}) — baseline for these profiles.\n`;
+}
 
 export function toMarkdown(result) {
   const out = [];
   const th = result.thresholds;
   const prevSources = [...new Set(result.profiles.filter((p) => !p.baseline).map((p) => `${p.previous_source}${p.previous_date ? ` (${p.previous_date})` : ''}`))];
-  if (!prevSources.length) return 'Baseline run — no previous report to compare with.\n';
+  if (!prevSources.length) return baselineText(result);
   out.push(`Previous report: ${prevSources.join(', ')}.`);
   out.push('');
   for (const p of result.profiles) {
@@ -185,12 +252,13 @@ export function toMarkdown(result) {
     if (c.notes.length) line += ` (notes: ${c.notes.join('; ')})`;
     out.push(`- **${name}**: ${line}`);
   }
+  for (const k of result.previous_only || []) out.push(`- **${k.toUpperCase()}**: in the previous report(s), not in this run.`);
   out.push('');
   out.push('| Profile | Metric | Previous | Current | Δ | |');
   out.push('|---|---|---|---|---|---|');
   for (const p of result.profiles) {
     if (p.baseline) continue;
-    const suffix = p.comparable.status === 'not-like-for-like' ? ' (not like-for-like)' : p.comparable.status === 'unconfirmed' ? ' (unconfirmed)' : '';
+    const suffix = suffixFor(p.comparable.status);
     for (const r of p.rows) {
       let prev, curr, delta;
       if (r.metric === 'success rate') {
@@ -200,7 +268,7 @@ export function toMarkdown(result) {
         prev = s(r.previous, r.previous_share_pct); curr = s(r.current, r.current_share_pct);
         delta = r.delta === null ? 'n/a' : `${sign(r.delta, 2)} pp`;
       } else {
-        prev = fmtNum(r.previous); curr = fmtNum(r.current); delta = r.delta === null ? 'n/a' : `${sign(r.delta, 1)}%`;
+        prev = fmtNum(r.previous); curr = fmtNum(r.current); delta = r.delta === null ? 'n/a' : `${sign(r.delta, pctDigits(r))}%`;
       }
       const flag = r.flag === 'regression' ? `⚠ regression${suffix}` : r.flag === 'ok' ? '✓' : '';
       out.push(`| ${p.profile.toUpperCase()} | ${r.metric} | ${prev} | ${curr} | ${delta} | ${flag} |`);
@@ -228,7 +296,7 @@ export function toText(result, { color = false } = {}) {
   const bold = (t) => c('1', t);
   const out = [];
   const compared = result.profiles.filter((p) => !p.baseline);
-  if (!compared.length) return 'Baseline run — no previous report to compare with.\n';
+  if (!compared.length) return baselineText(result);
   const src = [...new Set(compared.map((p) => `${p.previous_source}${p.previous_date ? ` (${p.previous_date})` : ''}`))].join(', ');
   out.push(bold(`Comparison with ${src}`));
   for (const p of result.profiles) {
@@ -242,12 +310,12 @@ export function toText(result, { color = false } = {}) {
   const rows = [['PROFILE', 'METRIC', 'PREVIOUS', 'CURRENT', 'CHANGE', '']];
   const flags = [];
   for (const p of compared) {
-    const suffix = p.comparable.status === 'yes' ? '' : ' (unconfirmed)';
+    const suffix = suffixFor(p.comparable.status);
     for (const r of p.rows) {
       let prev, curr, delta;
       if (r.metric === 'success rate') { prev = fmtRate(r.previous); curr = fmtRate(r.current); delta = r.delta === null ? 'n/a' : `${sign(r.delta, 2)} pp`; }
       else if (r.metric === 'timeouts') { prev = r.previous === null ? 'n/a' : String(r.previous); curr = r.current === null ? 'n/a' : String(r.current); delta = r.delta === null ? 'n/a' : `${sign(r.delta, 2)} pp`; }
-      else { prev = fmtNum(r.previous); curr = fmtNum(r.current); delta = r.delta === null ? 'n/a' : `${sign(r.delta, 1)}%`; }
+      else { prev = fmtNum(r.previous); curr = fmtNum(r.current); delta = r.delta === null ? 'n/a' : `${sign(r.delta, pctDigits(r))}%`; }
       rows.push([p.profile.toUpperCase(), r.metric, prev, curr, delta, '']);
       flags.push(r.flag === 'regression' ? (suffix ? yellow(`⚠ regression${suffix}`) : red('⚠ regression')) : r.flag === 'ok' ? green('✓') : '');
     }
@@ -296,7 +364,7 @@ function main(argv) {
       else if (a === '-h' || a === '--help') {
         console.log('usage: node compare.mjs --prev <report.md|raw.json> [--prev ...] --curr <report.md|raw.json> [--p95 20] [--p99 20] [--success-pp 1] [--timeout-pp 0.1] [--dedicated] [--format md|text|json] [--fail-on-regression]');
         return 0;
-      } else throw new Error(`unknown argument ${a}`);
+      } else throw new Error(`unknown argument ${a}${a.startsWith('-') ? '' : ' (several previous reports: repeat --prev before each file)'}`);
     }
     if (!curr) throw new Error('--curr is required');
     const currRaw = extractRaw(readFileSync(curr, 'utf8'), curr);
@@ -306,7 +374,9 @@ function main(argv) {
     console.log(format === 'json' ? JSON.stringify(result, null, 2) : format === 'text' ? toText(result, { color }) : toMarkdown(result));
     return failOnRegression && result.confirmed_regressions.length ? 1 : 0;
   } catch (e) {
-    console.error(`compare: ${e instanceof NoRawBlockError ? `${e.message} — parse the tables into a raw JSON file and pass that instead` : e.message}`);
+    const hint = e instanceof NoRawBlockError ? ' — an older report: parse its tables into a raw JSON file (unknown = null) and pass that instead'
+      : e instanceof SyntaxError ? ' — invalid JSON' : '';
+    console.error(`compare: ${e.message}${hint}`);
     return 2;
   }
 }
