@@ -111,19 +111,25 @@ function redact(req) {
       else notes.push(`API key "${name}" goes in the query string — prefer a header if the API allows (query strings end up in k6 logs)`);
     } else notes.push(`Postman auth type "${a.type}" is not converted — add it to the test by hand`);
   }
-  // query string
+  // query string — parsed as text (no URL object), other parameters keep their original encoding
   let url = req.url;
-  try {
-    const u = new URL(url.replace(/^\$([A-Z0-9_]+)/, 'https://placeholder.invalid'));
+  const qi = url.indexOf('?');
+  if (qi >= 0) {
+    const hi = url.indexOf('#', qi);
+    const query = url.slice(qi + 1, hi < 0 ? undefined : hi);
     let changed = false;
-    for (const [k, v] of [...u.searchParams]) {
-      if (SECRET_FIELD.test(k) && !/^\$[A-Z0-9_]+$/.test(v)) { u.searchParams.set(k, '__P__' + placeholder(`query ?${k}=`, envName(k))); changed = true; notes.push(`secret-looking query parameter "${k}" — it will appear in k6 logs; move it to a header if the API allows`); }
-    }
-    if (changed) {
-      const s = u.toString().replace(/__P__%24/g, '$').replace(/__P__\$/g, '$');
-      url = /^\$[A-Z0-9_]+/.test(req.url) ? req.url.match(/^\$[A-Z0-9_]+/)[0] + s.slice('https://placeholder.invalid'.length) : s;
-    }
-  } catch { /* leave URLs with placeholders as they are */ }
+    const parts = query.split('&').map((pair) => {
+      const eq = pair.indexOf('=');
+      if (eq < 0) return pair;
+      let k = pair.slice(0, eq); try { k = decodeURIComponent(k); } catch { /* keep raw */ }
+      const v = pair.slice(eq + 1);
+      if (!SECRET_FIELD.test(k) || /^\$[A-Z0-9_]+$/.test(v)) return pair;
+      changed = true;
+      notes.push(`secret-looking query parameter "${k}" — it will appear in k6 logs; move it to a header if the API allows`);
+      return `${pair.slice(0, eq)}=${placeholder(`query ?${k}=`, envName(k))}`;
+    });
+    if (changed) url = `${url.slice(0, qi)}?${parts.join('&')}${hi < 0 ? '' : url.slice(hi)}`;
+  }
   // JSON body fields
   let body = req.body;
   if (body) {
