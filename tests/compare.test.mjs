@@ -248,3 +248,9 @@ test('review: several --prev files must each have their own flag (helpful error)
   assert.equal(r.status, 2);
   assert.match(r.stderr, /repeat --prev/);
 });
+
+test('text format: a long regression list is summarised on one line', () => {
+  const worse = { ...base, p95_ms: 300, p99_ms: 600, success_rate: 0.9 };
+  const res = compareRuns([{ source: 'p', raw: { ...base, profiles: { low: base, high: base } } }], { ...base, profiles: { low: worse, high: worse } });
+  assert.match(toText(res), /REGRESSION: 6 flags on LOW, HIGH — see ⚠ rows/);
+});

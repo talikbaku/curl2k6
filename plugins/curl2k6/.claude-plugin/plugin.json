@@ -1,8 +1,27 @@
 {
   "name": "curl2k6",
   "version": "1.2.0",
-  "description": "Turn a curl into a k6 load test, run it across load profiles locally or on your CI, collect metrics, write a report and flag regressions against the previous run. Includes the curl2k6 skill and the curl2k6-runner agent.",
-  "author": { "name": "Talat Gurbanbayov" },
+  "description": "k6 load testing from a curl: generate the test, run smoke/low/medium/high profiles locally or in CI (Azure DevOps template), pull metrics (Prometheus, Grafana, Datadog, Elasticsearch), write a report and flag performance regressions vs. the previous run with a deterministic script.",
+  "author": {
+    "name": "Talat Gurbanbayov"
+  },
   "license": "MIT",
-  "keywords": ["k6", "load-testing", "performance", "qa", "curl", "regression", "grafana", "confluence"]
+  "keywords": [
+    "k6",
+    "load-testing",
+    "performance-testing",
+    "performance-regression",
+    "stress-testing",
+    "api-testing",
+    "qa",
+    "curl",
+    "ci",
+    "azure-devops",
+    "grafana",
+    "prometheus",
+    "datadog",
+    "confluence"
+  ],
+  "homepage": "https://github.com/talikbaku/curl2k6",
+  "repository": "https://github.com/talikbaku/curl2k6"
 }
