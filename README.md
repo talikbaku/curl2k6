@@ -27,6 +27,15 @@ A [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) plugin (sk
 4. **Report** — one fixed template, written as a **markdown file in your repo** and published to your **team wiki** (Confluence, Azure DevOps Wiki).
 5. **Compare** — every next run finds the previous report and produces a **comparison report**: deltas per profile and a regression verdict computed by a script, not by the LLM.
 
+```mermaid
+flowchart LR
+  in["curl · HAR · Postman · OpenAPI"] --> test["k6 test<br/>in your repo"]
+  test --> run["Run locally or in your CI<br/>smoke → LOW → MEDIUM → HIGH"]
+  run --> cmp["compare.mjs<br/>vs. the previous report"]
+  cmp --> rep["Report<br/>markdown in git + team wiki"]
+  rep -. "next release" .-> run
+```
+
 Ask again after each release — *"re-run the load test, did it get slower?"* — and the history builds itself.
 
 ## No curl? Start from what you already have
@@ -59,6 +68,11 @@ secret: header Cookie → $COOKIE (the test reads it from the environment; the v
 ## What a report looks like
 
 From [`examples/reports/`](examples/reports/) — real k6 runs against the bundled demo service, before and after a simulated bad release:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/media/p95-dark.png">
+  <img src="docs/media/p95-light.png" width="700" alt="p95 latency per profile, previous run vs after release: LOW 29.2 → 42.0 ms (+44%), MEDIUM 30.6 → 49.6 ms (+62%), HIGH 35.1 → 92.9 ms (+165%)">
+</picture>
 
 | Profile | Metric | Previous | Current | Δ | |
 |---|---|---|---|---|---|
