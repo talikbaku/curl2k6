@@ -12,13 +12,20 @@ for k in params_in:
 params = {k: params_in.get(k, p.get('default')) for k, p in declared.items()}
 for k, p in declared.items():
     if 'values' in p: assert params[k] in p['values'], f'{k}={params[k]} not in {p["values"]}'
-used = set(re.findall(r'\$\{\{\s*parameters\.(\w+)\s*\}\}', open(pipeline).read()))
+used = set(re.findall(r'parameters\.(\w+)', ' '.join(re.findall(r'\$\{\{(.*?)\}\}', open(pipeline).read()))))
 assert used <= set(declared), f'undeclared parameters used: {used - set(declared)}'
 tmp = tempfile.mkdtemp(prefix='azagent-')
 macros = {'Build.ArtifactStagingDirectory': f'{tmp}/a', 'Agent.TempDirectory': f'{tmp}/t', 'Build.SourcesDirectory': workdir}
 os.makedirs(macros['Build.ArtifactStagingDirectory']); os.makedirs(macros['Agent.TempDirectory'])
+# secret/pipeline variables the real agent would substitute in $(Name) macros, e.g. AZ_MACROS='{"API_TOKEN":"x"}'
+import json as _json
+macros.update(_json.loads(os.environ.get('AZ_MACROS') or '{}'))
 def expand(s):
-    s = re.sub(r'\$\{\{\s*parameters\.(\w+)\s*\}\}', lambda m: str(params[m.group(1)]), str(s))
+    # supported template expressions: ${{ parameters.x }} and ${{ replace(parameters.x, 'a', 'b') }}
+    s = re.sub(r"\$\{\{\s*replace\(\s*parameters\.(\w+)\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*\)\s*\}\}",
+               lambda m: str(params[m.group(1)]).replace(m.group(2), m.group(3)), str(s))
+    s = re.sub(r'\$\{\{\s*parameters\.(\w+)\s*\}\}', lambda m: str(params[m.group(1)]), s)
+    assert '${{' not in s, f'unsupported template expression in: {s[:120]}'
     return re.sub(r'\$\(([\w.]+)\)', lambda m: macros.get(m.group(1), m.group(0)), s)
 path_prefix = []
 env_base = dict(os.environ)
@@ -47,6 +54,8 @@ for i, step in enumerate(doc['steps']):
     elif 'publish' in step:
         src = expand(step['publish']); src = src if os.path.isabs(src) else os.path.join(workdir, src)
         dst = os.path.join(tmp, 'published', expand(step['artifact']))
+        if not os.path.isdir(src):
+            print(f'[{i}] {name}: path not found: {src} (Azure fails this step)'); failed = True; continue
         shutil.copytree(src, dst)
         print(f'[{i}] {name}: artifact "{expand(step["artifact"])}" -> {sorted(os.listdir(dst))}')
     else:

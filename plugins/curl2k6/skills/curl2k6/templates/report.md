@@ -9,10 +9,10 @@ Delete sections that have no data — but say in "Data sources" why they're miss
 
 ## Summary
 
-- **Verdict**: PASS / FAIL / PARTIAL — one sentence why (which thresholds failed at which profile).
+- **Verdict**: PASS / FAIL / PARTIAL — by k6 thresholds per profile (PASS = all passed, FAIL = all crossed, PARTIAL = mixed); one sentence which thresholds failed at which profile. Regressions vs. the previous run are stated separately and only as listed by `compare.mjs` under "Regressions on comparable profiles".
 - **Target**: `<METHOD> <endpoint>` on `<environment>` (production: yes/no)
 - **Test script**: `<repo>/<path>` @ `<commit sha>` (MR/PR: <link or "none">)
-- **Key finding**: 1–3 sentences in plain language (e.g. "latency holds up to MEDIUM; at HIGH p95 grows 20× while errors stay ~0 → requests queue, not fail").
+- **Key finding**: 1–3 sentences in plain language, quoting values from the tables rather than computing new ratios (e.g. "p95 stays under 40 ms up to MEDIUM; at HIGH it is 820 ms while errors stay at 0.0% — requests queue, they don't fail").
 
 ## Results by profile (client side — k6)
 
@@ -22,7 +22,7 @@ Source: k6 run summary (`K6_SUMMARY_JSON` / `summary.json`).
 
 ## Over time (client side)
 
-Per profile: when did latency/errors start to degrade (minute into the run, VU level at that moment)? Include a small table or chart of p95 by 1-min bucket if a time-series backend was available.
+Only with a time-series backend (Prometheus, InfluxDB, Grafana, Datadog): per profile, when did latency/errors start to degrade (minute into the run, load level at that moment), with a small table of p95 by 1-min bucket from the backend queries. Without one, delete this section and say so in "Data sources".
 
 ## Server side
 
@@ -37,7 +37,7 @@ Notable correlations (DB query time, CPU, pod restarts, connection pool, …) �
 
 Only if a previous report for the same test exists. Otherwise write: "Baseline run — no previous report to compare with."
 
-<output of `node scripts/compare.mjs --prev <previous report(s)> --curr <run folder>/raw.json`>
+<output of `node scripts/compare.mjs --prev <report> [--prev <report> ...] --curr <run folder>/raw.json`>
 
 The script applies the regression rules (strictly greater than: p95/p99 worse by >20%, success rate down by >1 pp, timeout share up by >0.1 pp unless other thresholds were agreed; missing values → n/a, no flag) and labels flags on non-comparable runs. If the previous report had no Raw numbers block, say here that its numbers were parsed from tables.
 

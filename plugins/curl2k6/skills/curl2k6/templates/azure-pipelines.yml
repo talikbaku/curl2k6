@@ -1,9 +1,10 @@
 # curl2k6 — k6 load test pipeline for Azure DevOps.
 # Generated with the curl2k6 skill (Claude Code). Copy next to the test (e.g. load/azure-pipelines.yml),
 # replace the <PLACEHOLDERS>, and create the pipeline once:
-#   az pipelines create --name <pipeline-name> --yml-path load/azure-pipelines.yml --skip-first-run true
+#   az pipelines create --name <pipeline-name> --yml-path load/azure-pipelines.yml --branch <branch> --skip-first-run true
 # Run one profile:
 #   az pipelines run --name <pipeline-name> --branch <branch> --parameters profile=low targetEnv=stage
+# (profile `smoke` = 1 req/s for 20 s: proves the target answers before a real profile)
 #
 # Why parameters and not variables: a variable defined in a YAML `variables:` block can't be overridden
 # at queue time — `--variables LOAD_PROFILE=high` would be silently ignored and the run would use the
@@ -17,7 +18,7 @@ parameters:
     displayName: Load profile
     type: string
     default: low
-    values: [low, medium, high]
+    values: [smoke, low, medium, high]
   - name: targetEnv
     displayName: Target environment (recorded in the report)
     type: string
@@ -53,7 +54,7 @@ steps:
 
   - bash: |
       set -euo pipefail
-      if command -v k6 >/dev/null; then k6 version; exit 0; fi
+      if command -v k6 >/dev/null; then echo "k6 already on the agent: $(k6 version)"; exit 0; fi
       K6_VERSION=v1.5.0
       OS=$(uname -s); ARCH=$(uname -m)
       case "$OS-$ARCH" in
@@ -65,41 +66,98 @@ steps:
       esac
       DIR="$(Agent.TempDirectory)/k6"
       mkdir -p "$DIR" && cd "$DIR"
-      URL="https://github.com/grafana/k6/releases/download/${K6_VERSION}/k6-${K6_VERSION}-${PKG}.${EXT}"
-      curl -sSfL -o "k6.${EXT}" "$URL"
-      if [ "$EXT" = zip ]; then unzip -q "k6.${EXT}"; else tar xzf "k6.${EXT}"; fi
+      BASE="https://github.com/grafana/k6/releases/download/${K6_VERSION}"
+      FILE="k6-${K6_VERSION}-${PKG}.${EXT}"
+      curl -sSfL -o "$FILE" "$BASE/$FILE"
+      curl -sSfL -o checksums.txt "$BASE/k6-${K6_VERSION}-checksums.txt"
+      EXPECTED=$(awk -v f="$FILE" '$2 == f {print $1}' checksums.txt)
+      if command -v sha256sum >/dev/null; then ACTUAL=$(sha256sum "$FILE" | awk '{print $1}'); else ACTUAL=$(shasum -a 256 "$FILE" | awk '{print $1}'); fi
+      if [ -z "$EXPECTED" ] || [ "$EXPECTED" != "$ACTUAL" ]; then
+        echo "##vso[task.logissue type=error]k6 download checksum mismatch for $FILE"; exit 1
+      fi
+      if [ "$EXT" = zip ]; then unzip -q "$FILE"; else tar xzf "$FILE"; fi
       "$DIR/k6-${K6_VERSION}-${PKG}/k6" version
       echo "##vso[task.prependpath]$DIR/k6-${K6_VERSION}-${PKG}"
-    displayName: Install k6 (if missing)
+    displayName: Install k6 (if missing, checksum-verified)
 
+  # Parameters reach the script only as environment variables (never pasted into the bash text, which
+  # would let a quote in a value run commands on the agent) and are validated before use. Every `$` is
+  # stripped at compile time (`replace(..., '$', '')`), so a value can't form an Azure macro such as
+  # $(System.AccessToken) — stripping only "$(" once is bypassable with "$$((...)". The host of baseUrl
+  # must be in ALLOWED_HOSTS (set in this file, so changing it needs push rights, not just queue rights):
+  # otherwise anyone who can queue the pipeline could send the API key to a host of their choice.
   - bash: |
       set -uo pipefail
+      fail() { echo "##vso[task.logissue type=error]$1"; exit 2; }
+      case "$LOAD_PROFILE" in smoke|low|medium|high) ;; *) fail "profile must be smoke|low|medium|high" ;; esac
+      case "$ON_THRESHOLDS" in fail|warn) ;; *) fail "onThresholds must be fail|warn" ;; esac
+      [[ "$TARGET_ENV" =~ ^[A-Za-z0-9._-]{1,40}$ ]] || fail "targetEnv must match [A-Za-z0-9._-]{1,40}"
+      url_re='^https?://[]A-Za-z0-9._~:/?#@!&+,;=%[-]+$'      # no spaces, quotes, $, backticks, parentheses
+      [[ "$BASE_URL" =~ $url_re ]] || fail "baseUrl must be a plain http(s) URL"
+      [[ "$TEST_SCRIPT" =~ ^[A-Za-z0-9._-][A-Za-z0-9._/-]*\.js$ && "$TEST_SCRIPT" != *..* ]] || fail "testScript must be a relative path to a .js file"
+      host="${BASE_URL#*://}"; host="${host%%[/?#]*}"; host="${host##*@}"; host="${host%%:*}"
+      [[ " ${ALLOWED_HOSTS} " == *" ${host} "* ]] || fail "host '${host}' of baseUrl is not in ALLOWED_HOSTS of this pipeline"
+
       RUN="$(Build.ArtifactStagingDirectory)/curl2k6"
+      LOG="$RUN/k6-$LOAD_PROFILE.log"
       mkdir -p "$RUN"                                   # k6 does not create OUT_DIR itself
-      k6 run \
-        -e LOAD_PROFILE='${{ parameters.profile }}' \
-        -e TARGET_ENV='${{ parameters.targetEnv }}' \
-        -e BASE_URL='${{ parameters.baseUrl }}' \
-        -e GIT_SHA="$(git rev-parse --short HEAD)" \
-        -e OUT_DIR="$RUN" \
-        '${{ parameters.testScript }}' 2>&1 | tee "$RUN/k6-${{ parameters.profile }}.log"
+      k6 run -e LOAD_PROFILE="$LOAD_PROFILE" -e TARGET_ENV="$TARGET_ENV" -e BASE_URL="$BASE_URL" \
+        -e GIT_SHA="$(git rev-parse --short HEAD)" -e OUT_DIR="$RUN" "$TEST_SCRIPT" 2>&1 | tee "$LOG"
       code=${PIPESTATUS[0]}
       echo "k6 exit code: $code"
+
+      # Azure masks secrets in the live log, not in files: scrub every file that goes into the artifact
+      # (k6 log and summaries). SECRET_ENV_NAMES lists the env vars holding secrets; comma-separated values
+      # (several keys) are split; values shorter than 6 characters are not scrubbed. If scrubbing can't be
+      # done reliably, the files are removed instead of being published.
+      scrub() {
+        local f content name val v parts
+        for name in ${SECRET_ENV_NAMES//,/ }; do
+          [[ "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || return 1
+        done
+        for f in "$RUN"/*; do
+          [ -f "$f" ] || continue
+          content=$(cat "$f") || return 1
+          for name in ${SECRET_ENV_NAMES//,/ }; do
+            val="${!name:-}"; [ -n "$val" ] || continue
+            IFS=',' read -ra parts <<< "${val//$'\n'/,}"
+            for v in "$val" "${parts[@]}"; do
+              v="${v#"${v%%[![:space:]]*}"}"; v="${v%"${v##*[![:space:]]}"}"
+              if [ ${#v} -ge 6 ]; then content="${content//"$v"/***}"; fi
+            done
+          done
+          printf '%s\n' "$content" > "$f" || return 1
+        done
+      }
+      if [ -n "${SECRET_ENV_NAMES:-}" ] && ! scrub; then
+        rm -f "$RUN"/*
+        echo "##vso[task.logissue type=error]could not scrub secrets (check SECRET_ENV_NAMES) — run files removed, not published"
+        exit 2
+      fi
+
       # 99 = thresholds crossed: the run is complete (summary + artifact are still published), but the result
       # is not OK. Default `fail` makes the run red, so a run with e.g. 100% 4xx can't look green in Azure
       # (observed with exit 99 tolerated: `succeeded` with 1094/1094 responses 4xx). `warn` keeps it green.
       if [ "$code" = 99 ]; then
-        if [ '${{ parameters.onThresholds }}' = warn ]; then
+        if [ "$ON_THRESHOLDS" = warn ]; then
           echo "##vso[task.logissue type=warning]k6 thresholds crossed (onThresholds=warn)"; exit 0
         fi
-        echo "##vso[task.logissue type=error]k6 thresholds crossed — complete run, see summary-${{ parameters.profile }}.json in the artifact"
+        echo "##vso[task.logissue type=error]k6 thresholds crossed — complete run, see summary-$LOAD_PROFILE.json in the artifact"
       fi
       exit "$code"
     displayName: k6 run — ${{ parameters.profile }}
-    # Secret pipeline variables are NOT visible to scripts unless mapped here explicitly
-    # (k6 then reads it as __ENV.API_TOKEN — no -e needed):
-    # env:
-    #   API_TOKEN: $(API_TOKEN)
+    env:
+      LOAD_PROFILE: ${{ parameters.profile }}
+      ON_THRESHOLDS: ${{ parameters.onThresholds }}
+      TARGET_ENV: ${{ replace(parameters.targetEnv, '$', '') }}
+      BASE_URL: ${{ replace(parameters.baseUrl, '$', '') }}
+      TEST_SCRIPT: ${{ replace(parameters.testScript, '$', '') }}
+      ALLOWED_HOSTS: <host-from-the-curl>  # space-separated hosts this pipeline may load (and send the key to);
+                                           # keep production hosts out of it unless this pipeline is meant for production
+      SECRET_ENV_NAMES: API_TOKEN          # names (not values) of the secret env vars below, scrubbed from published files
+      # Secret pipeline variables are NOT visible to scripts unless mapped here explicitly
+      # (k6 then reads it as __ENV.API_TOKEN — no -e needed):
+      # API_TOKEN: $(API_TOKEN)
 
   - publish: $(Build.ArtifactStagingDirectory)/curl2k6
     artifact: curl2k6-${{ parameters.profile }}

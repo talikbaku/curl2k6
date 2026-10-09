@@ -110,3 +110,33 @@ test('runs table derives UTC start from finish time minus run duration', () => {
   const md = runsTable(buildRaw([summary()]));
   assert.match(md, /\| LOW \| 2026-10-08 19:59:29 \| 2026-10-08 20:00:00 \| \| \|/);
 });
+
+test('review: noisy logs — truncated/quoted K6_SUMMARY_JSON lines are skipped with a warning; JSON log format works', () => {
+  const good = `K6_SUMMARY_JSON ${JSON.stringify(summary())}`;
+  const warnings = [];
+  const got = readSummaries(['+ grep \'K6_SUMMARY_JSON {\' k6.log', 'msg="diag status=500 body=K6_SUMMARY_JSON {oops"', good,
+    'K6_SUMMARY_JSON {"meta":{"pro'].join('\n'), 'ci.log', (m) => warnings.push(m));
+  assert.equal(got.length, 1);
+  assert.equal(warnings.length, 3);
+  assert.match(warnings[0], /ci\.log:1:/);
+  const jsonLog = `{"level":"info","msg":"starting"}\n${good}\n{"level":"info","msg":"done"}`;
+  assert.equal(readSummaries(jsonLog, 'j.log', () => {}).length, 1);
+  assert.throws(() => readSummaries('K6_SUMMARY_JSON {broken', 'x.log', () => {}), /valid K6_SUMMARY_JSON/);
+});
+
+test('review: different commits across profiles produce a warning', () => {
+  const raw = buildRaw([summary({ meta: { script_commit: 'aaa' } }), summary({ meta: { profile: 'high', script_commit: 'bbb' } })]);
+  assert.match(raw.warnings[0], /different script commits \(aaa, bbb\)/);
+  assert.equal(Object.keys(raw).includes('warnings'), false);
+});
+
+test('security review: zero requests and zero 2xx give null, not 0 / PASS-looking numbers', () => {
+  const none = profileFromSummary(summary({ metrics: { items_success: { type: 'rate', values: { rate: 0, passes: 0, fails: 0 } }, items_latency_2xx: { type: 'trend', values: { 'p(95)': 0, 'p(99)': 0 } } } }));
+  assert.equal(none.requests, 0);
+  assert.equal(none.success_rate, null);
+  assert.equal(none.p95_ms_2xx, null);
+  assert.ok(none.derived.some((d) => d.startsWith('no requests were sent')));
+  const all4xx = profileFromSummary(summary({ metrics: { items_success: { type: 'rate', values: { rate: 0, passes: 0, fails: 50 } }, items_latency_2xx: { type: 'trend', values: { 'p(95)': 0 } } } }));
+  assert.equal(all4xx.success_rate, 0);
+  assert.equal(all4xx.p95_ms_2xx, null);
+});

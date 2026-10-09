@@ -33,7 +33,7 @@ steps:
 
   - bash: |
       set -euo pipefail
-      if command -v k6 >/dev/null; then k6 version; exit 0; fi
+      if command -v k6 >/dev/null; then echo "k6 already on the agent: $(k6 version)"; exit 0; fi
       K6_VERSION=v1.5.0
       OS=$(uname -s); ARCH=$(uname -m)
       case "$OS-$ARCH" in
@@ -45,19 +45,30 @@ steps:
       esac
       DIR="$(Agent.TempDirectory)/k6"
       mkdir -p "$DIR" && cd "$DIR"
-      URL="https://github.com/grafana/k6/releases/download/${K6_VERSION}/k6-${K6_VERSION}-${PKG}.${EXT}"
-      curl -sSfL -o "k6.${EXT}" "$URL"
-      if [ "$EXT" = zip ]; then unzip -q "k6.${EXT}"; else tar xzf "k6.${EXT}"; fi
+      BASE="https://github.com/grafana/k6/releases/download/${K6_VERSION}"
+      FILE="k6-${K6_VERSION}-${PKG}.${EXT}"
+      curl -sSfL -o "$FILE" "$BASE/$FILE"
+      curl -sSfL -o checksums.txt "$BASE/k6-${K6_VERSION}-checksums.txt"
+      EXPECTED=$(awk -v f="$FILE" '$2 == f {print $1}' checksums.txt)
+      if command -v sha256sum >/dev/null; then ACTUAL=$(sha256sum "$FILE" | awk '{print $1}'); else ACTUAL=$(shasum -a 256 "$FILE" | awk '{print $1}'); fi
+      if [ -z "$EXPECTED" ] || [ "$EXPECTED" != "$ACTUAL" ]; then
+        echo "##vso[task.logissue type=error]k6 download checksum mismatch for $FILE"; exit 1
+      fi
+      if [ "$EXT" = zip ]; then unzip -q "$FILE"; else tar xzf "$FILE"; fi
       "$DIR/k6-${K6_VERSION}-${PKG}/k6" version
       echo "##vso[task.prependpath]$DIR/k6-${K6_VERSION}-${PKG}"
-    displayName: Install k6 (if missing)
+    displayName: Install k6 (if missing, checksum-verified)
 
   - bash: npm test
     displayName: Unit tests (scripts)
 
-  - bash: bash examples/run-demo.sh ${{ parameters.profiles }}
+  - bash: |
+      set -euo pipefail
+      [[ "$PROFILES" =~ ^(low|medium|high)(\ (low|medium|high))*$ ]] || { echo "##vso[task.logissue type=error]profiles must be space-separated low|medium|high"; exit 2; }
+      bash examples/run-demo.sh $PROFILES
     displayName: Demo — baseline vs. simulated bad release
     env:
+      PROFILES: ${{ replace(parameters.profiles, '$', '') }}   # passed as env and validated — never pasted into the script
       FORCE_COLOR: '1'
 
   - bash: |
@@ -70,6 +81,7 @@ steps:
         echo "##vso[task.logissue type=warning]Regression detected — in a real pipeline this exit code 1 fails the run. Expected here (SLOW release)."
         exit 0
       fi
+      if [ "$code" = 0 ]; then echo "##vso[task.logissue type=error]The demo's bad release was NOT detected — the demo is broken"; exit 1; fi
       exit "$code"
     displayName: Regression gate (expected to detect one)
     env:
