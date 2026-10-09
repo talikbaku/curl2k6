@@ -24,8 +24,14 @@ path_prefix = []
 env_base = dict(os.environ)
 if os.environ.get('HIDE_K6'):
     env_base['PATH'] = ':'.join(p for p in env_base['PATH'].split(':') if not os.path.exists(os.path.join(p, 'k6')))
+failed = False
 for i, step in enumerate(doc['steps']):
     name = expand(step.get('displayName', next(iter(step))))
+    cond = str(step.get('condition', 'succeeded()')).replace(' ', '')
+    if failed and cond not in ('succeededOrFailed()', 'always()', 'failed()'):
+        print(f'[{i}] {name}: skipped (previous step failed, condition {cond})'); continue
+    if not failed and cond == 'failed()':
+        print(f'[{i}] {name}: skipped (condition failed())'); continue
     if 'bash' in step:
         env = dict(env_base); env['PATH'] = ':'.join(path_prefix + [env['PATH']])
         env.update({k: expand(v) for k, v in (step.get('env') or {}).items()})
@@ -37,7 +43,7 @@ for i, step in enumerate(doc['steps']):
         tail = [l for l in out.splitlines() if l.strip() and '##vso' not in l][-4:]
         for l in tail: print('      |', l[:150])
         if r.returncode != 0:
-            print('JOB FAILED'); sys.exit(1)
+            failed = True
     elif 'publish' in step:
         src = expand(step['publish']); src = src if os.path.isabs(src) else os.path.join(workdir, src)
         dst = os.path.join(tmp, 'published', expand(step['artifact']))
@@ -45,4 +51,5 @@ for i, step in enumerate(doc['steps']):
         print(f'[{i}] {name}: artifact "{expand(step["artifact"])}" -> {sorted(os.listdir(dst))}')
     else:
         print(f'[{i}] {name}: (not emulated: {next(iter(step))})')
-print('JOB SUCCEEDED'); print('published:', os.path.join(tmp, 'published'))
+print('JOB FAILED' if failed else 'JOB SUCCEEDED'); print('published:', os.path.join(tmp, 'published'))
+sys.exit(1 if failed else 0)

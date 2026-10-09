@@ -1,7 +1,7 @@
 # <test name> — <YYYY-MM-DD> — <environment> — <profiles run, e.g. LOW / MEDIUM / HIGH>
 
 <!--
-Report template for curl2k6 / curl2k6-runner.
+Report template for curl2k6 / curl2k6-runner. Written in English unless the user explicitly asked for another language.
 The results tables and the Raw numbers block come from scripts/to-raw.mjs; the comparison section from scripts/compare.mjs — paste their output verbatim.
 The same content goes to every destination: the markdown file as-is, the wiki page converted to the wiki's format.
 Delete sections that have no data — but say in "Data sources" why they're missing. Never invent numbers.

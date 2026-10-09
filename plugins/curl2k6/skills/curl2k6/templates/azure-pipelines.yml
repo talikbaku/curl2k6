@@ -30,11 +30,21 @@ parameters:
     displayName: k6 test script (path in the repo)
     type: string
     default: <load/name.js>
+  - name: onThresholds
+    displayName: When k6 thresholds are crossed (exit code 99)
+    type: string
+    default: fail
+    values: [fail, warn]
 
-# Microsoft-hosted agents can only reach public endpoints. If the service is reachable only from your
-# network, use a self-hosted agent pool instead:
+# Microsoft-hosted agents run from Microsoft's public IPs: a service behind an IP allowlist answers them
+# with 403 (observed: "Your IP address is not allowed"). Use the pool the team's other pipelines use
+# if hosted agents are not allowed through:
 #   pool:
-#     name: <self-hosted-pool-name>
+#     name: <pool-name>
+# Secrets kept in a variable group (Library): uncomment and name the group. The new pipeline's first run
+# waits in `notStarted` until the group is permitted for it (run page -> Permit).
+# variables:
+#   - group: <variable-group>
 pool:
   vmImage: ubuntu-latest
 
@@ -75,11 +85,19 @@ steps:
         '${{ parameters.testScript }}' 2>&1 | tee "$RUN/k6-${{ parameters.profile }}.log"
       code=${PIPESTATUS[0]}
       echo "k6 exit code: $code"
-      # 99 = thresholds crossed: the run itself is complete and the report will show which threshold failed.
-      if [ "$code" = 99 ]; then echo "##vso[task.logissue type=warning]k6 thresholds crossed"; exit 0; fi
+      # 99 = thresholds crossed: the run is complete (summary + artifact are still published), but the result
+      # is not OK. Default `fail` makes the run red, so a run with e.g. 100% 4xx can't look green in Azure
+      # (observed with exit 99 tolerated: `succeeded` with 1094/1094 responses 4xx). `warn` keeps it green.
+      if [ "$code" = 99 ]; then
+        if [ '${{ parameters.onThresholds }}' = warn ]; then
+          echo "##vso[task.logissue type=warning]k6 thresholds crossed (onThresholds=warn)"; exit 0
+        fi
+        echo "##vso[task.logissue type=error]k6 thresholds crossed — complete run, see summary-${{ parameters.profile }}.json in the artifact"
+      fi
       exit "$code"
     displayName: k6 run — ${{ parameters.profile }}
-    # Secret pipeline variables are NOT visible to scripts unless mapped here explicitly:
+    # Secret pipeline variables are NOT visible to scripts unless mapped here explicitly
+    # (k6 then reads it as __ENV.API_TOKEN — no -e needed):
     # env:
     #   API_TOKEN: $(API_TOKEN)
 

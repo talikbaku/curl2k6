@@ -89,9 +89,9 @@ node plugins/curl2k6/skills/curl2k6/scripts/compare.mjs \
 
 | | |
 |---|---|
-| **Run** | locally · GitLab CI (proven in practice) · Azure DevOps (pipeline template + `az` recipe; verified offline against the official schema and an emulated `az` — [first real run checklist](docs/azure-devops.md)) · GitHub Actions / Jenkins (generic instructions) |
+| **Run** | locally · GitLab CI (proven in practice) · Azure DevOps (pipeline template + `az` recipe; verified on a real Azure DevOps organization — Microsoft-hosted and autoscaled self-hosted pools, variable-group secrets, Azure DevOps Wiki report — [checklist](docs/azure-devops.md)) · GitHub Actions / Jenkins (generic instructions) |
 | **Metrics** | k6 summary (always, no backend needed) · Prometheus / VictoriaMetrics / Thanos / Mimir · Grafana · Datadog (MCP or API) · Elasticsearch / Kibana / OpenSearch · InfluxDB |
-| **Reports** | markdown file · Confluence or any wiki Claude has a connector for |
+| **Reports** | markdown file · Confluence or any wiki Claude has a connector for · Azure DevOps Wiki (via `az devops wiki`) — written in English by default |
 
 What has and hasn't been verified against real systems: [GUIDE §14](docs/GUIDE.md#14-what-has-and-hasnt-been-verified).
 
