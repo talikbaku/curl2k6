@@ -22,18 +22,20 @@ A [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) plugin (sk
 ## How it works
 
 1. **Build** — you paste a curl (or point at a HAR file, Postman collection or OpenAPI spec); Claude writes a k6 test in your repo, following the conventions of the load tests you already have.
-2. **Run** — on your machine or in **your own CI** (Azure DevOps template included; GitLab, GitHub Actions, Jenkins via your existing pipeline): smoke, then LOW / MEDIUM / HIGH.
-3. **Measure** — client-side numbers from k6, plus server-side numbers from the monitoring you already have (Prometheus, Grafana, Datadog, Elasticsearch, InfluxDB).
-4. **Report** — one fixed template, written as a **markdown file in your repo** and published to your **team wiki** (Confluence, Azure DevOps Wiki).
-5. **Compare** — every next run finds the previous report and produces a **comparison report**: deltas per profile and a regression verdict computed by a script, not by the LLM.
+2. **Run & measure** — on your machine or in **your own CI** (Azure DevOps template included; GitLab, GitHub Actions, Jenkins via your existing pipeline): smoke, then LOW / MEDIUM / HIGH. Client-side numbers from k6, plus server-side numbers from the monitoring you already have (Prometheus, Grafana, Datadog, Elasticsearch, InfluxDB).
+3. **Compare** — every next run finds the previous report: deltas per profile and a regression verdict **computed by a script, not by the LLM**. The first run becomes the baseline.
+4. **Report** — one fixed template with the comparison inside, written as a **markdown file in your repo** and published to your **team wiki** (Confluence, Azure DevOps Wiki).
 
 ```mermaid
 flowchart LR
-  in["curl · HAR · Postman · OpenAPI"] --> test["k6 test<br/>in your repo"]
-  test --> run["Run locally or in your CI<br/>smoke → LOW → MEDIUM → HIGH"]
-  run --> cmp["compare.mjs<br/>vs. the previous report"]
-  cmp --> rep["Report<br/>markdown in git + team wiki"]
+  build["1 · Build<br/>curl, HAR, Postman,<br/>OpenAPI → k6 test"]
+  run["2 · Run & measure<br/>locally or in your CI<br/>LOW · MEDIUM · HIGH"]
+  cmp{{"3 · Compare<br/>vs. the previous report<br/>verdict by script, not LLM"}}
+  rep["4 · Report<br/>markdown in git<br/>+ team wiki"]
+  build --> run --> cmp --> rep
   rep -. "next release" .-> run
+  classDef key stroke-width:2.5px
+  class cmp key
 ```
 
 Ask again after each release — *"re-run the load test, did it get slower?"* — and the history builds itself.
@@ -71,7 +73,7 @@ From [`examples/reports/`](examples/reports/) — real k6 runs against the bundl
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/media/p95-dark.png">
-  <img src="docs/media/p95-light.png" width="700" alt="p95 latency per profile, previous run vs after release: LOW 29.2 → 42.0 ms (+44%), MEDIUM 30.6 → 49.6 ms (+62%), HIGH 35.1 → 92.9 ms (+165%)">
+  <img src="docs/media/p95-light.png" width="700" alt="p95 latency, previous run → this release: LOW 29 → 42 ms (+44%), MEDIUM 31 → 50 ms (+62%), HIGH 35 → 93 ms (+165%)">
 </picture>
 
 | Profile | Metric | Previous | Current | Δ | |
