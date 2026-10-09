@@ -8,7 +8,7 @@ Two layers. Layer A is mandatory and backend-independent. Layer B is whatever th
 - **Client vs server**: k6 numbers = latency as the client sees it. Backend/APM numbers = what the service saw. Report them in separate sections and never mix them in one table.
 - **Units**: normalize everything to ms in the report. Common traps: Datadog span `@duration` is **nanoseconds** while Datadog `trace.*` metrics are **seconds**; Prometheus histograms are usually **seconds**, and so are k6 trends pushed via Prometheus remote write (`k6_http_req_duration_p95` = 0.098 means 98 ms); Elasticsearch fields may be µs (`event.duration` in ECS is **nanoseconds**).
 - **Reproducibility**: put every query you ran (with the exact time window) in a report appendix.
-- **Credentials**: refer to them by env var name (`$DD_API_KEY`, `$GRAFANA_TOKEN`, …) and never echo the value. If none exists, ask the user to export one in their own terminal — never to paste it into the chat.
+- **Credentials**: refer to them only by the env var name the user gives you (ask which env var holds the key for that backend) and never echo the value. If none exists, ask the user to export one in their own terminal — never to paste it into the chat.
 - **Before relying on a backend, run one tiny probe query** (e.g. last 5 min, one series) and confirm it returns data. If the probe fails, say which backend failed and continue with Layer A rather than guessing.
 
 ## Layer A — k6 run summary (always)
@@ -35,7 +35,7 @@ Layer A gives whole-run aggregates only (no time series). That is enough for a p
 ### B2. Grafana (front-end for any datasource)
 
 Grafana is not a store — it proxies to Prometheus / Loki / Elasticsearch / InfluxDB / etc. Use it when that's the only thing the user has access to.
-- Auth: service account token, `Authorization: Bearer $GRAFANA_TOKEN`.
+- Auth: service account token, `Authorization: Bearer` + the token env var the user named.
 - List datasources: `GET <grafana>/api/datasources` → note `uid` and `type`.
 - **Best path — reuse an existing dashboard panel's query** instead of writing one from scratch: `GET <grafana>/api/search?query=<name>` → `GET <grafana>/api/dashboards/uid/<uid>` → `dashboard.panels[].targets[]` (and `panels[].panels[]` for rows). The datasource is often set on the **panel**, not on the target — take `panel.datasource.uid` when the target has none. Substitute template vars (`$service`, `$__rate_interval` → `1m`, etc.).
 - Run a query: `POST <grafana>/api/ds/query` with
@@ -48,7 +48,7 @@ Grafana is not a store — it proxies to Prometheus / Loki / Elasticsearch / Inf
 ### B3. Datadog
 
 - **If a Datadog MCP server is connected, prefer it** (no keys needed): metrics via its metric query tool, APM via span aggregation tools. Probe with one small query first.
-- Otherwise API with `DD-API-KEY: $DD_API_KEY` and `DD-APPLICATION-KEY: $DD_APP_KEY`; site varies (`api.datadoghq.com`, `api.datadoghq.eu`, `api.us5.datadoghq.com`, …) — ask, or read it from the team's agent config.
+- Otherwise API with `DD-API-KEY` and `DD-APPLICATION-KEY` headers from the env vars the user named; site varies (`api.datadoghq.com`, `api.datadoghq.eu`, `api.us5.datadoghq.com`, …) — ask, or read it from the team's agent config.
   - Timeseries: `GET https://api.<site>/api/v1/query?from=<unix>&to=<unix>&query=<query>`.
 - Getting k6 metrics in (optional, usually not worth it): the built-in `statsd` output was **removed in k6 v0.55** — it needs a custom k6 binary built with the xk6-output-statsd extension (`K6_STATSD_ADDR=<dd-agent>:8125`, `K6_STATSD_ENABLE_TAGS=true`, metrics arrive as `k6.*`). Check `k6 version` first; if the team doesn't already have such a build, skip this and rely on Layer A + server-side APM below.
 - Server side without any k6 output (often the most useful): APM trace metrics for the target service. **Find the real metric name first** (search metrics with `trace` + tag `service:<svc>`) — it depends on the tracer/integration, e.g. `trace.http.server.request`, `trace.http.request`, `trace.servlet.request`, `trace.postgresql.query`. Then:

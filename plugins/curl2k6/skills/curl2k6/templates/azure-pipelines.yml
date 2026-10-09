@@ -107,18 +107,18 @@ steps:
       echo "k6 exit code: $code"
 
       # Azure masks secrets in the live log, not in files: scrub every file that goes into the artifact
-      # (k6 log and summaries). SECRET_ENV_NAMES lists the env vars holding secrets; comma-separated values
+      # (k6 log and summaries). REDACT_VARS lists the env vars holding secrets; comma-separated values
       # (several keys) are split; values shorter than 6 characters are not scrubbed. If scrubbing can't be
       # done reliably, the files are removed instead of being published.
       scrub() {
         local f content name val v parts
-        for name in ${SECRET_ENV_NAMES//,/ }; do
+        for name in ${REDACT_VARS//,/ }; do
           [[ "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || return 1
         done
         for f in "$RUN"/*; do
           [ -f "$f" ] || continue
           content=$(cat "$f") || return 1
-          for name in ${SECRET_ENV_NAMES//,/ }; do
+          for name in ${REDACT_VARS//,/ }; do
             val="${!name:-}"; [ -n "$val" ] || continue
             IFS=',' read -ra parts <<< "${val//$'\n'/,}"
             for v in "$val" "${parts[@]}"; do
@@ -129,9 +129,9 @@ steps:
           printf '%s\n' "$content" > "$f" || return 1
         done
       }
-      if [ -n "${SECRET_ENV_NAMES:-}" ] && ! scrub; then
+      if [ -n "${REDACT_VARS:-}" ] && ! scrub; then
         rm -f "$RUN"/*
-        echo "##vso[task.logissue type=error]could not scrub secrets (check SECRET_ENV_NAMES) — run files removed, not published"
+        echo "##vso[task.logissue type=error]could not scrub secrets (check REDACT_VARS) — run files removed, not published"
         exit 2
       fi
 
@@ -154,7 +154,7 @@ steps:
       TEST_SCRIPT: ${{ replace(parameters.testScript, '$', '') }}
       ALLOWED_HOSTS: <host-from-the-curl>  # space-separated hosts this pipeline may load (and send the key to);
                                            # keep production hosts out of it unless this pipeline is meant for production
-      SECRET_ENV_NAMES: API_TOKEN          # names (not values) of the secret env vars below, scrubbed from published files
+      REDACT_VARS: API_TOKEN          # names (not values) of the secret env vars below, scrubbed from published files
       # Secret pipeline variables are NOT visible to scripts unless mapped here explicitly
       # (k6 then reads it as __ENV.API_TOKEN — no -e needed):
       # API_TOKEN: $(API_TOKEN)
