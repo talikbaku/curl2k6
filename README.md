@@ -9,7 +9,7 @@ curl ──▶ k6 test ──▶ LOW / MEDIUM / HIGH runs ──▶ metrics ─�
           (local or your CI)         (k6 summary + Prometheus, Grafana, Datadog, Elasticsearch, InfluxDB)
 ```
 
-[![test](https://github.com/<your-github-username>/curl2k6/actions/workflows/test.yml/badge.svg)](https://github.com/<your-github-username>/curl2k6/actions/workflows/test.yml)
+[![test](https://github.com/talikbaku/curl2k6/actions/workflows/test.yml/badge.svg)](https://github.com/talikbaku/curl2k6/actions/workflows/test.yml)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
 ![Claude Code re-runs a load test after a release and flags the regression](docs/media/claude-session.gif)
@@ -47,7 +47,7 @@ Every report has the same structure (verdict, per-profile results, 2xx-only late
 Requires Node.js ≥ 22 and [k6](https://grafana.com/docs/k6/latest/set-up/install-k6/).
 
 ```bash
-git clone https://github.com/<your-github-username>/curl2k6.git && cd curl2k6
+git clone https://github.com/talikbaku/curl2k6.git && cd curl2k6
 bash examples/run-demo.sh          # baseline → "bad release" → tables + comparison + verdict
 ```
 
@@ -56,7 +56,7 @@ bash examples/run-demo.sh          # baseline → "bad release" → tables + com
 ## Install in Claude Code
 
 ```
-/plugin marketplace add <your-github-username>/curl2k6
+/plugin marketplace add talikbaku/curl2k6
 /plugin install curl2k6@curl2k6
 ```
 
@@ -89,7 +89,7 @@ node plugins/curl2k6/skills/curl2k6/scripts/compare.mjs \
 
 | | |
 |---|---|
-| **Run** | locally · GitLab CI (proven in practice) · Azure DevOps (pipeline template + `az` recipe; verified on a real Azure DevOps organization — Microsoft-hosted and autoscaled self-hosted pools, variable-group secrets, Azure DevOps Wiki report — [checklist](docs/azure-devops.md)) · GitHub Actions / Jenkins (generic instructions) |
+| **Run** | **locally** — verified · **Azure DevOps** — pipeline template + `az` recipe, verified on one real organization ([checklist](docs/azure-devops.md); agents need bash and access to GitHub releases or a preinstalled k6) · **GitLab CI, GitHub Actions, Jenkins** — Claude drives your team's existing pipeline with generic instructions; no bundled templates yet, and only GitLab has been used in practice (with an earlier version) |
 | **Metrics** | k6 summary (always, no backend needed) · Prometheus / VictoriaMetrics / Thanos / Mimir · Grafana · Datadog (MCP or API) · Elasticsearch / Kibana / OpenSearch · InfluxDB |
 | **Reports** | markdown file · Confluence or any wiki Claude has a connector for · Azure DevOps Wiki (via `az devops wiki`) — written in English by default |
 
@@ -117,7 +117,9 @@ npm test                         # unit tests (node --test, no install step)
 bash examples/run-demo.sh low    # quick end-to-end check
 ```
 
-Issues and PRs welcome — especially real-world reports from GitHub Actions / Jenkins and backends not yet verified.
+Issues and PRs welcome — especially real-world reports from GitLab CI / GitHub Actions / Jenkins and backends not yet verified.
+
+**Roadmap:** hardened pipeline templates and recipes for GitHub Actions, GitLab CI and Jenkins (same protections as the Azure template: validated parameters, host allowlist, secret scrubbing, checksum-verified k6).
 
 ## License
 

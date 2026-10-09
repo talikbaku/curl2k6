@@ -2,6 +2,10 @@
 
 Verified on a real Azure DevOps organization: the demo pipeline on a Microsoft-hosted agent, and a LOW + MEDIUM API run on an autoscaled self-hosted pool with a variable-group secret, reported to the repo and the Azure DevOps Wiki. The offline checks in `tests/azure/` (official schema, job emulator, `az` emulator) remain. Use this checklist for your organization's first run — agents, permissions and policies differ per organization.
 
+**General Azure DevOps behaviour vs. what was observed in one organization.** The recipe's rules about runtime parameters vs. YAML variables, `$(...)` macro expansion, secrets masked only in live logs (not in artifact files), and pipelines running the remote branch are how Azure DevOps works. The Cloudflare IP allowlist against Microsoft-hosted agents, the autoscaled pool showing 0 agents, the commit-author email policy, variable-group approval behaviour and comma-separated keys were observed in one organization — yours may differ.
+
+**Agent requirements for the template:** Linux or macOS agent with bash, `curl`, `tar`/`unzip`, `sha256sum` or `shasum`; and either access to `github.com` (k6 release download) or k6 preinstalled on the agent. Azure DevOps Server needs version 2020 or later (`parameters:`, `publish:`, `replace()`); classic (non-YAML) pipelines are not supported.
+
 ## 1. Prerequisites (on the machine where Claude Code runs)
 
 ```bash

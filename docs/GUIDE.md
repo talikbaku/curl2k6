@@ -128,7 +128,7 @@ How to set a variable without showing it to Claude: in a **separate terminal**, 
 
 In Claude Code:
 ```
-/plugin marketplace add <your-github-username>/curl2k6
+/plugin marketplace add talikbaku/curl2k6
 /plugin install curl2k6@curl2k6
 ```
 Restart Claude Code if prompted. The skill is invoked as `/curl2k6` (or `/curl2k6:curl2k6` if another skill has the same name); the agent is `curl2k6:curl2k6-runner`. You can also skip the slash command and just describe the task.
@@ -140,7 +140,7 @@ For a team fork: change the files, bump `version` in `plugins/curl2k6/.claude-pl
 ### Option 2. By hand
 
 ```bash
-git clone https://github.com/<your-github-username>/curl2k6.git
+git clone https://github.com/talikbaku/curl2k6.git
 mkdir -p ~/.claude/skills ~/.claude/agents
 cp -R curl2k6/plugins/curl2k6/skills/curl2k6 ~/.claude/skills/
 cp curl2k6/plugins/curl2k6/agents/curl2k6-runner.md ~/.claude/agents/
@@ -428,7 +428,7 @@ Worth knowing:
 - **Runner queues.** If an image build is waiting for a free runner, the agent waits rather than re-triggering.
 - **Local runs** ("no CI for now") are possible too — you need k6 on your machine.
 
-Proven in practice on GitLab CI. GitHub Actions and Jenkins follow the same general rules, but there have been no real runs yet (section 14).
+Azure DevOps has a bundled, hardened pipeline template and recipe (below) and was verified on one real organization. GitLab CI, GitHub Actions and Jenkins are driven through the team's existing pipeline with the same general rules; there are no bundled templates for them yet, GitLab was used in practice with an earlier version, GitHub Actions and Jenkins have not been run (section 14).
 
 ### Azure DevOps
 
@@ -489,7 +489,7 @@ Before a production run, warn the service owners / on-call — this is not done 
 | Elasticsearch / Kibana | ✅ verified, on synthetic data | ES + Kibana in Docker, generated access logs |
 | InfluxDB | ⚠ not verified | Recipe only |
 | GitLab CI | ✅ proven in practice | Many real runs (full chain) |
-| GitHub Actions / Jenkins | ⚠ not verified | General instructions |
+| GitLab CI / GitHub Actions / Jenkins | ⚠ generic instructions only | No bundled pipeline templates yet — Claude uses the team's existing pipeline. GitLab was used in practice with an earlier version; GitHub Actions and Jenkins not run. Pipelines Claude writes for these CIs don't get the Azure template's protections (validated parameters, host allowlist, secret scrubbing) — review them |
 | Azure DevOps | ✅ verified on a real organization | Demo pipeline on a Microsoft-hosted agent; real API run (LOW + MEDIUM) on an autoscaled self-hosted pool with a variable-group secret, report to repo + Azure DevOps Wiki. Fixes from that run are in the recipe (IP-allowlisted APIs vs hosted agents, `Checkpoint.Authorization` for variable groups, list-valued secrets, wiki paths, commit-email policy VS403702). Offline checks stay in `tests/azure/`. Not yet re-run on real Azure: the `onThresholds=fail` default (emulated) |
 | Confluence | ✅ in practice (with an earlier version of the skill) | Same logic here; the report template is newer |
 | Comparison with the previous report | ✅ verified | Unit tests + 4 scenarios on real reports (v1.1); a full "CI → report → comparison" run with the v1.2 template hasn't been done on CI yet |
