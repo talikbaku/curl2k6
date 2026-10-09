@@ -1,8 +1,8 @@
 # curl2k6 for Claude Code — detailed guide
 
-Version 1.2. Skill `curl2k6` + agent `curl2k6-runner` + two deterministic scripts (`to-raw.mjs`, `compare.mjs`).
+Version 1.2. Skill `curl2k6` + agent `curl2k6-runner` + deterministic scripts (`to-raw.mjs`, `compare.mjs`, `request-from.mjs`).
 
-You give Claude a curl, and it does the rest: writes a k6 load test, runs it locally or on your CI across several load profiles (LOW / MEDIUM / HIGH by default), collects metrics from whatever monitoring you have, compares the result with the previous run, and writes a report to a markdown file and/or a Confluence page (or another wiki).
+You give Claude a curl (or a HAR file, a Postman collection, an OpenAPI spec), and it does the rest: writes a k6 load test, runs it locally or on your CI across several load profiles (LOW / MEDIUM / HIGH by default), collects metrics from whatever monitoring you have, compares the result with the previous run, and writes a report to a markdown file and/or a Confluence page (or another wiki).
 
 ---
 
@@ -31,6 +31,7 @@ You give Claude a curl, and it does the rest: writes a k6 load test, runs it loc
 ```
 curl2k6/
 ├── .claude-plugin/marketplace.json        ← makes the repo installable as a plugin marketplace
+├── .devcontainer/                         ← Codespaces / dev container: Node 22 + checksum-verified k6
 ├── plugins/curl2k6/
 │   ├── .claude-plugin/plugin.json
 │   ├── agents/curl2k6-runner.md           ← the agent: long CI runs
@@ -42,6 +43,7 @@ curl2k6/
 │       │   ├── report.md                  ← report template
 │       │   └── azure-pipelines.yml        ← Azure DevOps pipeline (runtime parameters, artifact)
 │       ├── scripts/
+│       │   ├── request-from.mjs           ← HAR / Postman → one request as a curl, secrets → $ENV placeholders
 │       │   ├── to-raw.mjs                 ← summaries/logs → results + Runs tables + Raw numbers block
 │       │   └── compare.mjs                ← deterministic comparison with the previous report
 │       └── references/
@@ -189,6 +191,8 @@ Type in Claude Code, for example:
 
 You can skip `/curl2k6` — the skill is picked up from the meaning ("build a load test from this curl").
 
+No curl at hand? Point at a file instead: *"load-test the 'List items' request from api.postman_collection.json"*, or a HAR saved from the browser's DevTools (Network → Save all as HAR), or an OpenAPI spec. For HAR and Postman Claude runs `scripts/request-from.mjs`: it lists the requests, you pick one, and it extracts it as a curl with tokens, cookies and secret-looking fields replaced by `$ENV` placeholders — the raw file (with live cookies) is never pasted into the conversation.
+
 > ⚠ If the curl contains a real token — no disaster, Claude won't save it into the code, but it's better to replace it with `<TOKEN>` before pasting.
 
 ### Step 1. Questions (skill, §0)
@@ -197,7 +201,7 @@ Claude asks its questions in one block. What it will ask and how to answer:
 
 | # | Question | Example answer | If you don't know |
 |---|---|---|---|
-| 1 | curl / endpoint description | already given | — required |
+| 1 | curl, HAR / Postman / OpenAPI request, or endpoint description | already given | — required |
 | 2 | Repo / folder for the test | `~/work/my-load-tests` | It suggests creating a folder |
 | 3 | Production or not | "stage" | It infers from the URL and **asks again**; production needs a separate confirmation |
 | 4 | Where to run | locally / GitLab CI / GitHub Actions / Jenkins / Azure DevOps | It first looks in the repo (`.gitlab-ci.yml`, `.github/workflows`, `Jenkinsfile`, `azure-pipelines.yml`) |

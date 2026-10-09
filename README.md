@@ -6,10 +6,11 @@
 ![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-D97757)
 ![node](https://img.shields.io/badge/node-%E2%89%A522-339933)
 
-**Paste a curl. Get a k6 load test, a report, and a computed verdict: did this release get slower?**
+**Paste a curl (or a HAR, Postman or OpenAPI request). Get a k6 load test, a report, and a computed verdict: did this release get slower?**
 
 > **Start here (2 min, no Claude needed):**
 > `git clone https://github.com/talikbaku/curl2k6.git && cd curl2k6 && bash examples/run-demo.sh` — watch it catch a regression.
+> Nothing installed? [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/talikbaku/curl2k6?quickstart=1) — k6 and Node are preinstalled; run `bash examples/run-demo.sh` in the terminal.
 > Then [use it on your API](#2-use-it-on-your-api).
 
 ![Claude Code re-runs a load test after a release and flags the regression](docs/media/claude-session.gif)
@@ -20,7 +21,7 @@ A [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) plugin (sk
 
 ## How it works
 
-1. **Build** — you paste a curl; Claude writes a k6 test in your repo, following the conventions of the load tests you already have.
+1. **Build** — you paste a curl (or point at a HAR file, Postman collection or OpenAPI spec); Claude writes a k6 test in your repo, following the conventions of the load tests you already have.
 2. **Run** — on your machine or in **your own CI** (Azure DevOps template included; GitLab, GitHub Actions, Jenkins via your existing pipeline): smoke, then LOW / MEDIUM / HIGH.
 3. **Measure** — client-side numbers from k6, plus server-side numbers from the monitoring you already have (Prometheus, Grafana, Datadog, Elasticsearch, InfluxDB).
 4. **Report** — one fixed template, written as a **markdown file in your repo** and published to your **team wiki** (Confluence, Azure DevOps Wiki).
@@ -54,7 +55,7 @@ The script is the easy part. This plugin handles what breaks around it:
 - **The verdict is computed, not eyeballed by an LLM.** `compare.mjs` applies fixed, configurable rules (p95/p99 worse by >20%, success rate down by >1 pp, timeout share up by >0.1 pp) and is unit-tested — including the float edge case at exactly 20%.
 - **No apples-to-oranges.** Different environment, load or duration → *not like-for-like*; a missing field → *cannot be confirmed*; missing data stays `n/a`, never 0. None of these is ever called a regression.
 - **Production runs need explicit confirmation** — every run, one profile at a time, with an automatic stop when results look like an incident.
-- **Secrets stay in env vars.** Never written into tests, commits or reports; the Azure template scrubs them from published artifacts, validates pipeline parameters and only loads hosts you allow.
+- **Secrets stay in env vars.** Never written into tests, commits or reports; HAR and Postman imports get tokens and cookies swapped for `$ENV` placeholders before anything reaches the conversation; the Azure template scrubs them from published artifacts, validates pipeline parameters and only loads hosts you allow.
 - **Your stack, your history.** Runs in your CI, reads your monitoring, writes to your wiki and repo — no vendor cloud, and every report is a reviewable file in git.
 - **Fits the repo it lands in.** Mirrors the auth, naming and profile style of load tests you already have instead of inventing a new one.
 - **Handles known traps:** CI jobs that go green before k6 finishes, profile variables that silently stay at the old value, unit mix-ups between backends, a run that sends zero requests and still "passes".
@@ -107,7 +108,7 @@ Then:
 — stage, LOW/MEDIUM/HIGH, report to load-reports/ and Confluence
 ```
 
-(`/curl2k6:curl2k6` if another installed skill has the same name.) Or just paste a curl and ask for a load test. Later, *"we shipped a release — re-run the load test and tell me if it got slower"* (in any language) picks up the existing test and the last report.
+(`/curl2k6:curl2k6` if another installed skill has the same name.) Or just paste a curl and ask for a load test — or point at a file: *"load-test the 'List items' request from api.postman_collection.json"* (also a HAR saved from DevTools, or an OpenAPI spec). Later, *"we shipped a release — re-run the load test and tell me if it got slower"* (in any language) picks up the existing test and the last report.
 
 What happens:
 1. Claude asks what it needs in one block — repo, environment, local or CI, metrics backends, profiles, report destination, where tokens live.
@@ -128,7 +129,7 @@ Defaults the skill offers — sized to your service on request ("profiles 10 / 5
 
 ### Scope and limits
 
-- **One endpoint per test.** Built from one curl. ID/credential pools are supported; multi-step flows (login → token → call) are not generated automatically — ask Claude to extend the script.
+- **One endpoint per test.** Built from one request (a curl, a HAR entry, a Postman request or an OpenAPI operation). ID/credential pools are supported; multi-step flows (login → token → call) are not generated automatically — ask Claude to extend the script.
 - **One run against one run.** No statistical model of run-to-run noise. On shared environments the report says a difference is a signal, not proof — re-run before concluding.
 - **Baseline:** the most recent matching report by default. Pin an accepted baseline by naming it ("compare with load-reports/orders-api-2026-09-01-stage-low.md") or passing it to `compare.mjs --prev`.
 - **What Claude asks before acting:** committing the test, every production run (one profile at a time), creating CI pipelines. It never asks you to paste a token and doesn't start extra runs after the report.

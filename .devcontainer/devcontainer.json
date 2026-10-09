@@ -1,0 +1,9 @@
+{
+  "name": "curl2k6",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
+  "postCreateCommand": "bash .devcontainer/install-k6.sh",
+  "postAttachCommand": "echo 'Try it: bash examples/run-demo.sh   (baseline -> bad release -> regression verdict, ~2 min)'",
+  "customizations": {
+    "codespaces": { "openFiles": ["README.md"] }
+  }
+}
