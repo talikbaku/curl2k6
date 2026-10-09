@@ -26,5 +26,9 @@
     "confluence"
   ],
   "homepage": "https://github.com/talikbaku/curl2k6",
-  "repository": "https://github.com/talikbaku/curl2k6"
+  "repository": "https://github.com/talikbaku/curl2k6",
+  "documentationUrl": "https://github.com/talikbaku/curl2k6/blob/main/docs/GUIDE.md",
+  "supportUrl": "https://github.com/talikbaku/curl2k6/issues",
+  "privacyPolicyUrl": "https://github.com/talikbaku/curl2k6/blob/main/PRIVACY.md",
+  "termsOfServiceUrl": "https://github.com/talikbaku/curl2k6/blob/main/LICENSE"
 }
