@@ -1,31 +1,32 @@
-# curl2k6
-
-**Give Claude a curl — get a k6 load test, a report, and an honest answer to "did this release make it slower?"**
-
-A [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) plugin (skill + agent) for QA and performance engineers:
-
-```
-curl ──▶ k6 test ──▶ LOW / MEDIUM / HIGH runs ──▶ metrics ──▶ report (.md / Confluence) ──▶ regression verdict vs. last run
-          (local or your CI)         (k6 summary + Prometheus, Grafana, Datadog, Elasticsearch, InfluxDB)
-```
+# curl2k6 — k6 load testing & performance-regression checks for Claude Code
 
 [![test](https://github.com/talikbaku/curl2k6/actions/workflows/test.yml/badge.svg)](https://github.com/talikbaku/curl2k6/actions/workflows/test.yml)
 ![license](https://img.shields.io/badge/license-MIT-blue)
+![k6](https://img.shields.io/badge/k6-1.x-7D64FF)
+![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-D97757)
+![node](https://img.shields.io/badge/node-%E2%89%A522-339933)
+
+**Paste a curl. Get a k6 load test, a report, and a computed verdict: did this release get slower?**
+
+> **Start here (2 min, no Claude needed):**
+> `git clone https://github.com/talikbaku/curl2k6.git && cd curl2k6 && bash examples/run-demo.sh` — watch it catch a regression.
+> Then [use it on your API](#2-use-it-on-your-api).
 
 ![Claude Code re-runs a load test after a release and flags the regression](docs/media/claude-session.gif)
 
-<sub>"Did the new release get slower?" — replay of a real headless Claude Code session with this plugin: the skill finds the previous report, re-runs the same profile, and `compare.mjs` flags the regression. Commands and outputs are verbatim, trimmed for length.</sub>
+<sub>Replay of a real Claude Code session: paste a curl, ask "did it get slower?", get the verdict computed by `compare.mjs`. Commands and outputs verbatim, trimmed; waits shortened.</sub>
 
-## Why not just ask Claude to write a k6 script?
+A [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) plugin (skill + background agent) for QA and performance engineers.
 
-Writing the script is the easy part. What goes wrong in real load testing is everything around it — and that's what this plugin encodes:
+## How it works
 
-- **Regression verdicts are computed, not "eyeballed" by an LLM.** `scripts/compare.mjs` applies fixed rules (p95/p99 worse by >20%, success rate down by >1 pp, timeout share up by >0.1 pp — configurable) and is unit-tested down to the floating-point trap where `(0.84 − 0.7) / 0.7` is `20.000000000000004%`.
-- **It refuses apples-to-oranges comparisons.** Different environment, target rate or planned duration → *not like-for-like*; a field missing in an old report → *cannot be confirmed*. Flags are shown but never called a regression.
-- **Missing data stays missing.** Unknown values are `null` / `n/a` — never silently 0.
-- **Production safety is not optional.** Read-only by default, a separate explicit confirmation for every production run, automatic stop when results look like an incident rather than load degradation, no "one more run to double-check".
-- **Battle-tested gotchas:** "launcher" CI jobs that go green before k6 finishes, stale profile variables (LOW silently running as HIGH), Datadog nanoseconds vs. seconds, `text` vs `.keyword` in Elasticsearch, `jslib.k6.io` blocked in CI.
-- **Secrets never leave env vars.** Tokens from your curl are never written into tests, commits, reports or prompts; the Azure template scrubs them from published logs, the test redacts them from diagnostics, and pipeline parameters can't inject commands.
+1. **Build** — you paste a curl; Claude writes a k6 test in your repo, following the conventions of the load tests you already have.
+2. **Run** — on your machine or in **your own CI** (Azure DevOps template included; GitLab, GitHub Actions, Jenkins via your existing pipeline): smoke, then LOW / MEDIUM / HIGH.
+3. **Measure** — client-side numbers from k6, plus server-side numbers from the monitoring you already have (Prometheus, Grafana, Datadog, Elasticsearch, InfluxDB).
+4. **Report** — one fixed template, written as a **markdown file in your repo** and published to your **team wiki** (Confluence, Azure DevOps Wiki).
+5. **Compare** — every next run finds the previous report and produces a **comparison report**: deltas per profile and a regression verdict computed by a script, not by the LLM.
+
+Ask again after each release — *"re-run the load test, did it get slower?"* — and the history builds itself.
 
 ## What a report looks like
 
@@ -33,18 +34,48 @@ From [`examples/reports/`](examples/reports/) — real k6 runs against the bundl
 
 | Profile | Metric | Previous | Current | Δ | |
 |---|---|---|---|---|---|
-| LOW | success rate | 99.21% | 98.41% | −0.79 pp | ✓ |
-| LOW | p95 ms | 29.22 | 42.11 | +44.1% | ⚠ regression |
-| MEDIUM | success rate | 100.00% | 98.80% | −1.20 pp | ⚠ regression |
-| HIGH | p95 ms | 35.26 | 93.13 | +164.1% | ⚠ regression |
+| LOW | p95 ms | 29.19 | 41.95 | +43.7% | ⚠ regression |
+| MEDIUM | success rate | 99.87% | 98.40% | −1.46 pp | ⚠ regression |
+| HIGH | p95 ms | 35.06 | 92.93 | +165.1% | ⚠ regression |
+| HIGH | timeouts | 0 (0.00%) | 0 (0.00%) | ±0.00 pp | ✓ |
 
-(−0.79 pp is below the 1 pp threshold, so it is shown but not flagged.)
+Every report follows one template — verdict, per-profile p50/p95/p99, 2xx-only latency, errors and timeouts, comparison, runs, data sources — and ends with a machine-readable **Raw numbers** block that the next run compares against. → [baseline report](examples/reports/items-api-2026-10-09-local-baseline.md) · [regression report](examples/reports/items-api-2026-10-09-local-regression.md)
 
-Every report has the same structure (verdict, per-profile results, 2xx-only latency, server side, comparison, runs, data sources, queries) and ends with a machine-readable **Raw numbers** block that the next run compares against. → [baseline report](examples/reports/items-api-2026-10-08-local-baseline.md) · [regression report](examples/reports/items-api-2026-10-08-local-regression.md)
+The same report, published to the team wiki:
 
-## Try it in 2 minutes (no Claude needed)
+<img src="docs/media/confluence-report.png" width="600" alt="The regression report as a Confluence page: verdict panel, results and comparison tables">
 
-Requires Node.js ≥ 22 and [k6](https://grafana.com/docs/k6/latest/set-up/install-k6/).
+<sub>Illustration: the same report as a Confluence page (mock-up, not a screenshot).</sub>
+
+## Why not just ask Claude to write a k6 script?
+
+The script is the easy part. This plugin handles what breaks around it:
+
+- **The verdict is computed, not eyeballed by an LLM.** `compare.mjs` applies fixed, configurable rules (p95/p99 worse by >20%, success rate down by >1 pp, timeout share up by >0.1 pp) and is unit-tested — including the float edge case at exactly 20%.
+- **No apples-to-oranges.** Different environment, load or duration → *not like-for-like*; a missing field → *cannot be confirmed*; missing data stays `n/a`, never 0. None of these is ever called a regression.
+- **Production runs need explicit confirmation** — every run, one profile at a time, with an automatic stop when results look like an incident.
+- **Secrets stay in env vars.** Never written into tests, commits or reports; the Azure template scrubs them from published artifacts, validates pipeline parameters and only loads hosts you allow.
+- **Your stack, your history.** Runs in your CI, reads your monitoring, writes to your wiki and repo — no vendor cloud, and every report is a reviewable file in git.
+- **Fits the repo it lands in.** Mirrors the auth, naming and profile style of load tests you already have instead of inventing a new one.
+- **Handles known traps:** CI jobs that go green before k6 finishes, profile variables that silently stay at the old value, unit mix-ups between backends, a run that sends zero requests and still "passes".
+
+### How it compares
+
+Grafana's mcp-k6 helps an assistant write, validate and run k6 scripts; Grafana Cloud k6's test comparison compares runs inside Grafana Cloud. curl2k6 needs no Grafana Cloud account: it runs k6 locally or in your existing CI, pulls server-side numbers from the Prometheus, Grafana, Datadog or Elasticsearch you already have, keeps every report as a versioned markdown file in your repo, and leaves the "did it get slower?" call to a zero-dependency script you can also gate a pipeline on — the LLM never decides it.
+
+## Supported
+
+| | |
+|---|---|
+| **Run** | **locally** — verified · **Azure DevOps** — hardened pipeline template + `az` recipe, verified on one real organization ([checklist](docs/azure-devops.md); Linux/macOS agents with bash, and GitHub access or a preinstalled k6) · **GitLab CI, GitHub Actions, Jenkins** — Claude drives your team's existing pipeline with generic instructions; no bundled templates yet, and only GitLab has been used in practice (with an earlier version) |
+| **Metrics** | k6 summary (always, no backend needed) · Prometheus / VictoriaMetrics / Thanos / Mimir · Grafana · Datadog (MCP or API) · Elasticsearch / Kibana / OpenSearch · InfluxDB |
+| **Reports** | markdown file · Confluence or any wiki Claude has a connector for · Azure DevOps Wiki (via `az devops wiki`) — written in English by default |
+
+What has and hasn't been verified against real systems: [GUIDE §14](docs/GUIDE.md#14-what-has-and-hasnt-been-verified).
+
+## 1. See it catch a regression
+
+Requires Node.js ≥ 22 and [k6](https://grafana.com/docs/k6/latest/set-up/install-k6/). No Claude, no CI.
 
 ```bash
 git clone https://github.com/talikbaku/curl2k6.git && cd curl2k6
@@ -53,8 +84,9 @@ bash examples/run-demo.sh          # baseline → "bad release" → tables + com
 
 ![run-demo.sh: baseline, simulated bad release, regression verdict](docs/media/demo.gif)
 
-## Install in Claude Code
+## 2. Use it on your API
 
+Install in Claude Code:
 ```
 /plugin marketplace add talikbaku/curl2k6
 /plugin install curl2k6@curl2k6
@@ -69,46 +101,69 @@ cp plugins/curl2k6/agents/curl2k6-runner.md ~/.claude/agents/
 ```
 </details>
 
-## Use
-
+Then:
 ```
 /curl2k6 here's the curl: curl -H 'Authorization: Bearer <TOKEN>' https://api.stage.example.com/v2/items?limit=50
 — stage, LOW/MEDIUM/HIGH, report to load-reports/ and Confluence
 ```
 
-(`/curl2k6:curl2k6` if another installed skill is also called `curl2k6`.) Or just paste a curl and ask for a load test. Later, *"we shipped a release — re-run the load test and tell me if it got slower"* (in any language) picks up the existing test and the last report. Claude asks what it needs in one block (repo, environment, local or CI, metrics backends, profiles, report destination, where tokens live), shows the draft test, opens an MR, finds the previous report, runs the profiles, and writes the report. On CI, the long part runs in the background via the `curl2k6-runner` agent.
+(`/curl2k6:curl2k6` if another installed skill has the same name.) Or just paste a curl and ask for a load test. Later, *"we shipped a release — re-run the load test and tell me if it got slower"* (in any language) picks up the existing test and the last report.
 
-**Gate a pipeline on regressions:**
-```bash
-node plugins/curl2k6/skills/curl2k6/scripts/compare.mjs \
-  --prev load-reports/items-api-2026-10-01-stage.md --curr out/raw.json --format text --fail-on-regression
+What happens:
+1. Claude asks what it needs in one block — repo, environment, local or CI, metrics backends, profiles, report destination, where tokens live.
+2. It shows the draft test; nothing is committed until you agree (on CI it opens an MR by default).
+3. It finds the previous report and tells you which one is the baseline.
+4. It runs the profiles (on CI in the background via the `curl2k6-runner` agent) and writes the report.
+
+### Profiles and defaults
+
+| Profile | Load (requests/s) | Duration | Purpose |
+|---|---|---|---|
+| smoke | 1 | 20 s | proves the target answers (status codes, auth) before a real profile |
+| low | ramp to 5 | ~5.5 min | light load |
+| medium | ramp to 20 | ~6.5 min | moderate load |
+| high | ramp to 50 | ~7.5 min | heavy load |
+
+Defaults the skill offers — sized to your service on request ("profiles 10 / 50 / 200 req/s"). k6 thresholds: success rate > 99%, p95 of 2xx responses < 500 ms, at least one request sent. Regression rules: p95/p99 worse by > 20%, success rate down by > 1 pp, timeout share up by > 0.1 pp — change them in plain words ("regression if p95 is worse by 10%") or with `compare.mjs` flags.
+
+### Scope and limits
+
+- **One endpoint per test.** Built from one curl. ID/credential pools are supported; multi-step flows (login → token → call) are not generated automatically — ask Claude to extend the script.
+- **One run against one run.** No statistical model of run-to-run noise. On shared environments the report says a difference is a signal, not proof — re-run before concluding.
+- **Baseline:** the most recent matching report by default. Pin an accepted baseline by naming it ("compare with load-reports/orders-api-2026-09-01-stage-low.md") or passing it to `compare.mjs --prev`.
+- **What Claude asks before acting:** committing the test, every production run (one profile at a time), creating CI pipelines. It never asks you to paste a token and doesn't start extra runs after the report.
+
+### Use in CI without Claude
+
+`to-raw.mjs` and `compare.mjs` are zero-dependency Node scripts — copy them next to your k6 test (from `plugins/curl2k6/skills/curl2k6/scripts/`) and gate any pipeline on a pinned baseline. GitHub Actions example:
+
+```yaml
+on:
+  workflow_dispatch:
+    inputs:
+      profile: { type: choice, options: [smoke, low, medium, high], default: low }
+permissions: { contents: read }
+jobs:
+  load:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: grafana/setup-k6-action@v1
+        with: { k6-version: '1.5.0' }
+      - name: k6 run                       # inputs go through env — never pasted into the script
+        env: { LOAD_PROFILE: "${{ inputs.profile }}", API_TOKEN: "${{ secrets.API_TOKEN }}" }
+        run: mkdir -p out && k6 run -e TARGET_ENV=stage -e OUT_DIR=out load/orders.js 2>&1 | tee out/k6.log
+      - name: Regression gate              # runs even when k6 thresholds failed the previous step
+        if: always()
+        env: { FORCE_COLOR: '1' }
+        run: |
+          node load/to-raw.mjs out/summary-*.json --format json > out/raw.json
+          node load/compare.mjs --prev load-reports/baseline.md --curr out/raw.json --format text --fail-on-regression
 ```
-`--format text` prints an aligned table for CI logs (coloured on a TTY or with `FORCE_COLOR=1` — set it in CI); the default `md` is the report section.
 
-## Supported
-
-| | |
-|---|---|
-| **Run** | **locally** — verified · **Azure DevOps** — pipeline template + `az` recipe, verified on one real organization ([checklist](docs/azure-devops.md); agents need bash and access to GitHub releases or a preinstalled k6) · **GitLab CI, GitHub Actions, Jenkins** — Claude drives your team's existing pipeline with generic instructions; no bundled templates yet, and only GitLab has been used in practice (with an earlier version) |
-| **Metrics** | k6 summary (always, no backend needed) · Prometheus / VictoriaMetrics / Thanos / Mimir · Grafana · Datadog (MCP or API) · Elasticsearch / Kibana / OpenSearch · InfluxDB |
-| **Reports** | markdown file · Confluence or any wiki Claude has a connector for · Azure DevOps Wiki (via `az devops wiki`) — written in English by default |
-
-What has and hasn't been verified against real systems: [GUIDE §14](docs/GUIDE.md#14-what-has-and-hasnt-been-verified).
-
-## Repo layout
-
-```
-plugins/curl2k6/
-├── skills/curl2k6/
-│   ├── SKILL.md                 the skill: questions, conventions, safety rules, reporting flow
-│   ├── templates/               test-template.js · summary.js · report.md · azure-pipelines.yml
-│   ├── scripts/                 to-raw.mjs · compare.mjs   (zero dependencies)
-│   └── references/              metrics-backends.md (query recipes per backend) · ci-azure-devops.md
-└── agents/curl2k6-runner.md     the background runner for CI
-examples/                        demo service · generated test example · example reports · Azure DevOps demo pipeline
-tests/                           npm test — unit tests for the scripts · azure/ — offline Azure Pipelines checks
-docs/GUIDE.md                    full guide
-```
+`--fail-on-regression` exits 1 only for regressions on comparable profiles; exit 2 means bad input (the message says which). `--format text` prints an aligned, coloured table for CI logs.
 
 ## Development
 
@@ -117,9 +172,7 @@ npm test                         # unit tests (node --test, no install step)
 bash examples/run-demo.sh low    # quick end-to-end check
 ```
 
-Issues and PRs welcome — especially real-world reports from GitLab CI / GitHub Actions / Jenkins and backends not yet verified.
-
-**Roadmap:** hardened pipeline templates and recipes for GitHub Actions, GitLab CI and Jenkins (same protections as the Azure template: validated parameters, host allowlist, secret scrubbing, checksum-verified k6).
+Repo layout, the full flow and all options: [docs/GUIDE.md](docs/GUIDE.md). Issues and PRs welcome — especially real-world reports from GitLab CI / GitHub Actions / Jenkins and backends not yet verified. **Roadmap:** hardened pipeline templates for GitHub Actions, GitLab CI and Jenkins (same protections as the Azure template).
 
 ## License
 

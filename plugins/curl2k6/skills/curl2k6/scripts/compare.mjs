@@ -328,7 +328,11 @@ export function toText(result, { color = false } = {}) {
   out.push('');
   const th = result.thresholds;
   out.push(`Thresholds: p95/p99 worse by >${th.p95}%/${th.p99}%, success rate down by >${th.successPp} pp, timeout share up by >${th.timeoutPp} pp`);
-  out.push(result.confirmed_regressions.length ? red(`REGRESSION: ${result.confirmed_regressions.join(', ')}`) : green('No regressions on comparable profiles.'));
+  const regs = result.confirmed_regressions;
+  const byProfile = [...new Set(regs.map((r) => r.split(' ')[0]))];
+  out.push(!regs.length ? green('No regressions on comparable profiles.')
+    : regs.length <= 3 ? red(`REGRESSION: ${regs.join(', ')}`)
+    : red(`REGRESSION: ${regs.length} flags on ${byProfile.join(', ')} — see ⚠ rows`));
   if (result.caveat) out.push(yellow('Shared/production environment: one difference is a signal, not proof — re-run before concluding.'));
   return out.join('\n') + '\n';
 }
