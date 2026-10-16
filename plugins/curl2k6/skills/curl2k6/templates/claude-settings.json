@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(k6 inspect:*)",
+      "Bash(k6 run -e TARGET_ENV=<non-production env>:*)",
+      "Bash(mkdir -p load-reports/:*)",
+      "Bash(git add load-tests/:*)",
+      "Bash(git add load-reports/:*)",
+      "Bash(git add .curl2k6.yml:*)",
+      "Bash(git add CURL2K6-FACTS.md:*)",
+      "Bash(git rev-parse --short HEAD)",
+      "Bash(date -u:*)",
+      "Edit(load-tests/**)",
+      "Write(load-tests/**)",
+      "Edit(load-reports/**)",
+      "Write(load-reports/**)",
+      "Edit(CURL2K6-FACTS.md)"
+    ]
+  }
+}
