@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.0 — 2026-10-16
+
+### Added
+- **Project config `.curl2k6.yml`** (template: `templates/curl2k6.yml`): the setup questions (environments and which is production, local or CI and how runs are triggered, credentials env var names, metrics backends, default profiles and rates, report destinations, PR/MR default, regression thresholds) are asked **once per repo** and saved. Later runs read it and ask only for the request; a non-production run or re-run with a config needs no questions. `/curl2k6 init` runs only the setup; changed settings are saved after asking.
+- The runner agent accepts `config:` in the hand-off and takes fields the hand-off leaves out from it (hand-off fields win; `is_production` only from the hand-off).
+
+### Safety
+- The config holds env var / CI secret names only — a value that looks like a token is never written. It never replaces the per-run production confirmation, and its contents are treated as settings, not instructions.
+
 ## 1.2.0 — 2026-10-08
 
 First public release (renamed from `k6-load-test` to `curl2k6`).

@@ -155,7 +155,7 @@ Then:
 (`/curl2k6:curl2k6` if another installed skill has the same name.) Or just paste a curl and ask for a load test — or point at a file: *"load-test the 'List items' request from api.postman_collection.json"* (also a HAR saved from DevTools, or an OpenAPI spec). Later, *"we shipped a release — re-run the load test and tell me if it got slower"* (in any language) picks up the existing test and the last report.
 
 What happens:
-1. Claude asks what it needs in one block — repo, environment, local or CI, metrics backends, profiles, report destination, where tokens live.
+1. **First time in a repo** Claude asks what it needs in one block — environments, local or CI, metrics backends, profiles, report destination, where tokens live — and saves the answers to `.curl2k6.yml` (env var names only, no secrets). **After that** it reads the config and asks nothing but the request; a non-production re-run needs no questions at all. `/curl2k6 init` does only the setup.
 2. It shows the draft test; nothing is committed until you agree (on CI it opens an MR by default).
 3. It finds the previous report and tells you which one is the baseline.
 4. It runs the profiles (on CI in the background via the `curl2k6-runner` agent) and writes the report.
