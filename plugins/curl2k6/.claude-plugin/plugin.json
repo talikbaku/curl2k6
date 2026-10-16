@@ -1,6 +1,6 @@
 {
   "name": "curl2k6",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "k6 load testing from a curl, HAR, Postman or OpenAPI request: generate the test, run smoke/low/medium/high profiles locally or in CI (Azure DevOps template), pull metrics (Prometheus, Grafana, Datadog, Elasticsearch), write a report and flag performance regressions vs. the previous run with a deterministic script.",
   "author": {
     "name": "Talat Gurbanbayov"

@@ -1,0 +1,56 @@
+# curl2k6 project config — the setup answers, written once by the curl2k6 skill and read on every run.
+# Commit it: everyone on the team (and the curl2k6-runner agent) uses the same settings.
+# NO SECRETS HERE — only names of env vars / CI secrets. Values never go into this file.
+# Delete a key to have the skill ask about it again.
+version: 1
+
+tests_dir: load-tests/                  # where k6 tests live in this repo
+
+environments:                           # names are used verbatim as TARGET_ENV — keep them stable
+  dev:
+    base_url: https://api.dev.example.com
+    production: false
+  # prod:
+  #   base_url: https://api.example.com
+  #   production: true                  # every run still needs its own confirmation in the conversation
+default_environment: dev
+
+run:
+  where: local                          # local | gitlab | github-actions | jenkins | azure-devops
+  # pipeline: load-tests                # CI pipeline / job name (CI only)
+  # trigger: "az pipelines run, profile via runtime parameter"   # how a run is started (CI only)
+  # k6_runs_in: ci-job                  # ci-job | k8s-pod | other — where k6 itself executes
+  # summary_location: artifact k6-summary   # where summary-<profile>.json / the K6_SUMMARY_JSON log line is read
+  open_pr: false                        # open a PR/MR for new tests before running (default true for CI)
+
+credentials:                            # env var (or CI secret) names only
+  - env: API_KEY
+    used_as: "ApiKey header"
+
+profiles:
+  default: [smoke, low]                 # what "run the load test" means when no profile is named
+  rates: { low: 5, medium: 20, high: 50 }   # target req/s; omit to keep the template defaults
+  cooldown_minutes: 5                   # pause between profiles
+
+metrics: []                             # k6 summary is always used; add backends here
+  # - type: prometheus                  # prometheus | grafana | datadog | elasticsearch | influxdb
+  #   url: https://prometheus.example.com
+  #   auth_env: PROM_TOKEN              # env var name, or omit when no auth
+  #   service_selector: 'service="items-api"'
+
+reports:
+  markdown_dir: load-reports/
+  wiki: none                            # none, or:
+  # wiki:
+  #   type: confluence                  # confluence | azure-devops-wiki | other
+  #   space: QA                         # Confluence space / Azure DevOps wiki name
+  #   parent_page: "Load tests"
+  language: en                          # report language (default English)
+  commit: true                          # commit the report and the run folder
+
+regression:                             # compare.mjs thresholds
+  p95_pct: 20
+  p99_pct: 20
+  success_pp: 1
+  timeout_pp: 0.1
+  dedicated: false                      # true only if nobody else uses the environment during runs
