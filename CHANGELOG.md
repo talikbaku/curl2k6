@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.1 — 2026-10-16
+
+### Added
+- **Known facts file `CURL2K6-FACTS.md`** (template: `templates/facts.md`, path: `facts_file` in `.curl2k6.yml`): what sessions learn — environment quirks (IP allowlists, rate limits, agent pools), endpoint properties (caching, required headers), root causes of failed runs, user decisions (baseline report, "no high on dev in working hours") — is written as one dated line the moment it's learned and read before every run, so the next session doesn't rediscover it. The runner agent reads it and returns "New facts"; only the skill writes the file. No secrets or report numbers; facts never relax a safety rule.
+- **Fewer permission prompts** (template: `templates/claude-settings.json`): on setup the skill offers allow rules for the test repo's `.claude/settings.json` — `k6 inspect`, `k6 run -e TARGET_ENV=<env>` for non-production environments only, run folders, edits of tests/reports/facts — plus the scripts' path in `.claude/settings.local.json`. Never a bare `k6 run`, `git push`, CI triggers or `curl`, so production runs still prompt.
+- `tests/templates.test.mjs` — checks the permission template can't let production or pushes through, and the config/facts templates.
+
+### Changed
+- Local run commands put `-e TARGET_ENV=<env>` first and use literal paths instead of shell variables, so the permission rules match.
+
 ## 1.3.0 — 2026-10-16
 
 ### Added

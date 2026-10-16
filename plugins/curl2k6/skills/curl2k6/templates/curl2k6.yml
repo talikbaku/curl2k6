@@ -5,6 +5,7 @@
 version: 1
 
 tests_dir: load-tests/                  # where k6 tests live in this repo
+facts_file: CURL2K6-FACTS.md           # what sessions learned (template: templates/facts.md)
 
 environments:                           # names are used verbatim as TARGET_ENV — keep them stable
   dev:
@@ -25,7 +26,7 @@ run:
 
 credentials:                            # env var (or CI secret) names only
   - env: API_KEY
-    used_as: "ApiKey header"
+    used_as: "Authorization header"
 
 profiles:
   default: [smoke, low]                 # what "run the load test" means when no profile is named

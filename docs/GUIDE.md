@@ -1,6 +1,6 @@
 # curl2k6 for Claude Code — detailed guide
 
-Version 1.3. Skill `curl2k6` + agent `curl2k6-runner` + deterministic scripts (`to-raw.mjs`, `compare.mjs`, `request-from.mjs`).
+Version 1.3.1. Skill `curl2k6` + agent `curl2k6-runner` + deterministic scripts (`to-raw.mjs`, `compare.mjs`, `request-from.mjs`).
 
 You give Claude a curl (or a HAR file, a Postman collection, an OpenAPI spec), and it does the rest: writes a k6 load test, runs it locally or on your CI across several load profiles (LOW / MEDIUM / HIGH by default), collects metrics from whatever monitoring you have, compares the result with the previous run, and writes a report to a markdown file and/or a Confluence page (or another wiki).
 
@@ -200,6 +200,10 @@ No curl at hand? Point at a file instead: *"load-test the 'List items' request f
 The answers are project settings, so Claude asks them **once per repo** and saves them to `.curl2k6.yml` at the repo root (template: `templates/curl2k6.yml`). Commit it — the team and the `curl2k6-runner` agent use the same settings. On later runs Claude reads the file, says in one line what it's using, and asks only what the file doesn't cover (usually just the request). `/curl2k6 init` runs only the setup; "from now on use stage" updates the file after asking.
 
 The config never holds secret values — only names of env vars / CI secrets — and it never replaces the production confirmation: an environment marked `production: true` still needs an explicit confirmation for every run.
+
+Two more files help across sessions:
+- **`CURL2K6-FACTS.md`** — the conversation is forgotten when the session ends, so whatever Claude learns that a later session would rediscover (an IP allowlist, a cached endpoint, the root cause of a failed run, which report you chose as the baseline) is written there as one dated line right away and read before every run. The runner agent reports "New facts" and the skill writes them. No secrets, no report numbers.
+- **`.claude/settings.json`** (optional, offered on setup) — allow rules so `k6 inspect`, `k6 run` against **non-production** environments, run folders and report edits don't ask for approval each time. Production runs, `git push` and CI triggers still prompt.
 
 First-time questions, in one block. What it will ask and how to answer:
 
