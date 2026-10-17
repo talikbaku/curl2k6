@@ -4,7 +4,7 @@
 #   2. "deploy a bad release" (SLOW=1) and run the same profiles -> current
 #   3. build the report tables + Raw numbers, compare with the baseline, flag regressions
 #
-# Needs: node >= 22, k6 (https://grafana.com/docs/k6/latest/set-up/install-k6/)
+# Needs: node >= 18, k6 (https://grafana.com/docs/k6/latest/set-up/install-k6/)
 # Usage: bash examples/run-demo.sh [profiles...]      (default: low medium high)
 #        COMPACT=1 bash examples/run-demo.sh          (print only the comparison at the end)
 #        PORT=18099 bash examples/run-demo.sh         (demo service port, default 8099)

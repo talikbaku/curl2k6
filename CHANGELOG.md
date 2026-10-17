@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.2 — 2026-10-17
+
+### Changed
+- **Node.js ≥ 18** (was ≥ 22): the scripts use nothing newer; unit tests and the end-to-end demo pass on Node 18 and 20, and CI runs the unit tests on 18 and 22. `npm test` no longer relies on Node 22's built-in test-file globbing. Node 16 is not supported.
+- README reworked after a marketing review: GIF first, then the copy-into-Claude-Code block; "Why not just ask Claude for a k6 script?", a "Works with" line, status line, release badge, star/Discussions call to action; duplicated TL;DR and table removed; the chart caption states the demo's custom profiles.
+- Media: GIFs scaled to ~600 px wide so they fit a 13" laptop screen (2.5 MB → 1.5 MB, 1.6 MB → 0.9 MB); chart PNGs have a solid background (the dark one was transparent with light text).
+- `docs/MORE.md` retitled "Details".
+
 ## 1.3.1 — 2026-10-16
 
 ### Added

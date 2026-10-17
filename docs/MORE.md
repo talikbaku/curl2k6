@@ -1,6 +1,6 @@
-# curl2k6 — details
+# curl2k6 — Details
 
-Everything that used to be in the README. Short version: [README](../README.md). Full flow: [GUIDE](GUIDE.md).
+Short version: [README](../README.md). Full flow: [GUIDE](GUIDE.md).
 
 ## No curl? Start from what you already have
 
