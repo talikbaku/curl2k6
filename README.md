@@ -8,6 +8,19 @@
 
 A Claude Code plugin for QA and performance engineers.
 
+## 🤖 Don't want to read? Copy this to your AI
+
+Click the copy button on the block and paste it into Claude Code (or any assistant):
+
+```text
+Set up curl2k6 for me (https://github.com/talikbaku/curl2k6) — a Claude Code plugin that turns a curl into a k6 load test, runs it, writes a report and checks for regressions against the previous run.
+1. Check that k6 and Node.js >= 18 are installed; tell me how to install what's missing.
+2. Install the plugin: /plugin marketplace add talikbaku/curl2k6 then /plugin install curl2k6@curl2k6
+3. Run /curl2k6 init in my test repo and ask me the setup questions in one block.
+4. Then I'll give you a curl.
+Short docs: https://github.com/talikbaku/curl2k6/blob/main/llms.txt
+```
+
 ![Claude Code re-runs a load test after a release and flags the regression](docs/media/claude-session.gif)
 
 ## ⚡ TL;DR
@@ -16,17 +29,14 @@ A Claude Code plugin for QA and performance engineers.
 - **Out:** a k6 test in your repo, runs locally or in your CI, a markdown/wiki report.
 - **Verdict:** computed by a script against the last report, not guessed by the LLM.
 
-## 🤖 Don't want to read? Copy this to your AI
-
-Click the copy button on the block and paste it into Claude Code (or any assistant):
-
-```text
-Set up curl2k6 for me (https://github.com/talikbaku/curl2k6) — a Claude Code plugin that turns a curl into a k6 load test, runs it, writes a report and checks for regressions against the previous run.
-1. Check that k6 and Node.js >= 22 are installed; tell me how to install what's missing.
-2. Install the plugin: /plugin marketplace add talikbaku/curl2k6 then /plugin install curl2k6@curl2k6
-3. Run /curl2k6 init in my test repo and ask me the setup questions in one block.
-4. Then I'll give you a curl. Never ask me to paste a token — tests read it from an env var.
-Short docs: https://github.com/talikbaku/curl2k6/blob/main/llms.txt
+```mermaid
+flowchart LR
+  build["1 · Build<br/>curl → k6 test"]
+  run["2 · Run<br/>locally or in CI<br/>LOW · MEDIUM · HIGH"]
+  cmp{{"3 · Compare<br/>vs. last report<br/>by script, not LLM"}}
+  rep["4 · Report<br/>markdown + wiki"]
+  build --> run --> cmp --> rep
+  rep -. "next release" .-> run
 ```
 
 ## 🚀 Install
@@ -36,7 +46,7 @@ Short docs: https://github.com/talikbaku/curl2k6/blob/main/llms.txt
 /plugin install curl2k6@curl2k6
 ```
 
-Needs [k6](https://grafana.com/docs/k6/latest/set-up/install-k6/) and Node.js ≥ 22.
+Needs [k6](https://grafana.com/docs/k6/latest/set-up/install-k6/) and Node.js ≥ 18.
 
 ## ▶️ Use
 
@@ -51,6 +61,11 @@ Needs [k6](https://grafana.com/docs/k6/latest/set-up/install-k6/) and Node.js �
 What it learns along the way (IP allowlists, caches, root causes) goes to `CURL2K6-FACTS.md`.
 
 ## 📊 What you get
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/media/p95-dark.png">
+  <img src="docs/media/p95-light.png" width="700" alt="p95 latency, previous run → this release: LOW 29 → 42 ms (+44%), MEDIUM 31 → 50 ms (+62%), HIGH 35 → 93 ms (+165%)">
+</picture>
 
 | Profile | Metric | Previous | Current | Δ | |
 |---|---|---|---|---|---|
@@ -71,6 +86,8 @@ Full examples: [baseline](examples/reports/items-api-2026-10-09-local-baseline.m
 ```bash
 git clone https://github.com/talikbaku/curl2k6.git && cd curl2k6 && bash examples/run-demo.sh
 ```
+
+![run-demo.sh: baseline, simulated bad release, regression verdict](docs/media/demo.gif)
 
 Nothing installed? [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/talikbaku/curl2k6?quickstart=1)
 

@@ -14,7 +14,7 @@ az extension add --name azure-devops          # once
 az login                                      # or: export AZURE_DEVOPS_EXT_PAT=<PAT>  (Build: Read & execute; Code: Read & write)
 az devops configure -d organization=https://dev.azure.com/<org>/ project=<project>
 az devops project show --project <project> --query name -o tsv   # must print the project name
-k6 version && node --version                  # node >= 22
+k6 version && node --version                  # node >= 18
 ```
 
 Agent: Microsoft-hosted (`vmImage: ubuntu-latest`) runs from Microsoft's public IPs. A new organization may have no hosted parallelism yet (runs wait in the queue). More importantly, a "public" API can still sit behind an IP allowlist: observed `403` with `{"message":"Your IP address is not allowed"}` from Cloudflare on a hosted agent, while the team's own pool (autoscaled agents, which show 0 online when idle) got through. Check which pool the team's other pipelines use (`az pipelines pool list`) and prove the target with a 20-second smoke run before the real one. A **self-hosted agent** (one is free) works right away and reaches whatever your machine/network can: *Project settings → Agent pools → Add pool (self-hosted) → New agent*, follow the 4 commands shown there.

@@ -3,7 +3,7 @@
 > Claude Code plugin (skill `curl2k6` + agent `curl2k6-runner`): curl / HAR / Postman / OpenAPI request -> k6 load test -> runs (smoke, low, medium, high) locally or in the team's CI -> markdown/wiki report -> regression verdict against the previous report, computed by a script (compare.mjs), not by the LLM.
 
 ## Install
-- Requirements: k6, Node.js >= 22.
+- Requirements: k6, Node.js >= 18.
 - In Claude Code: `/plugin marketplace add talikbaku/curl2k6`, then `/plugin install curl2k6@curl2k6`.
 
 ## Use

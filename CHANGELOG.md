@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.2 — 2026-10-17
+
+### Changed
+- **Node.js ≥ 18** (was ≥ 22): the scripts use nothing newer; unit tests and the end-to-end demo pass on Node 18 and 20, and CI runs the unit tests on 18 and 22. `npm test` no longer relies on Node 22's built-in test-file globbing. Node 16 is not supported.
+- README: the copy-to-your-AI block is right under the one-line description; the flow diagram, the p95 chart and the demo GIF are back.
+
 ## 1.3.1 — 2026-10-16
 
 ### Added

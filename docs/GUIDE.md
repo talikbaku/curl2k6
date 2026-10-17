@@ -1,6 +1,6 @@
 # curl2k6 for Claude Code — detailed guide
 
-Version 1.3.1. Skill `curl2k6` + agent `curl2k6-runner` + deterministic scripts (`to-raw.mjs`, `compare.mjs`, `request-from.mjs`).
+Version 1.3.2. Skill `curl2k6` + agent `curl2k6-runner` + deterministic scripts (`to-raw.mjs`, `compare.mjs`, `request-from.mjs`).
 
 You give Claude a curl (or a HAR file, a Postman collection, an OpenAPI spec), and it does the rest: writes a k6 load test, runs it locally or on your CI across several load profiles (LOW / MEDIUM / HIGH by default), collects metrics from whatever monitoring you have, compares the result with the previous run, and writes a report to a markdown file and/or a Confluence page (or another wiki).
 
@@ -102,7 +102,7 @@ You need **both** the skill and the agent for CI runs: the skill hands the run o
 | What | Required? | Why |
 |---|---|---|
 | Claude Code | yes | — |
-| Node.js ≥ 22 | yes | Runs `to-raw.mjs` / `compare.mjs` (no npm packages needed) |
+| Node.js ≥ 18 | yes | Runs `to-raw.mjs` / `compare.mjs` (no npm packages needed) |
 | A repo where the test will live | yes | The test code is written there and the MR is opened there |
 | API access to CI from your machine | to run on CI | A signed-in CLI (`glab`, `gh`, `az login`) or a token in an environment variable, VPN if the CI is internal. `glab` / `gh` make life easier but aren't required |
 | k6 on your machine | only for local runs | `brew install k6` / [other OSes](https://grafana.com/docs/k6/latest/set-up/install-k6/) |
