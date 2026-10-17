@@ -1,16 +1,19 @@
 # curl2k6
 
 [![test](https://github.com/talikbaku/curl2k6/actions/workflows/test.yml/badge.svg)](https://github.com/talikbaku/curl2k6/actions/workflows/test.yml)
+[![release](https://img.shields.io/github/v/release/talikbaku/curl2k6)](https://github.com/talikbaku/curl2k6/releases)
+[![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-D97757)](#-install)
 ![license](https://img.shields.io/badge/license-MIT-blue)
-![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-D97757)
 
 **Paste a curl → get a k6 load test, a report, and a computed answer to "did this release get slower?"**
 
 A Claude Code plugin for QA and performance engineers.
 
-## 🤖 Don't want to read? Copy this to your AI
+<img src="docs/media/claude-session.gif" width="600" alt="Claude Code re-runs a load test after a release and flags the regression">
 
-Click the copy button on the block and paste it into Claude Code (or any assistant):
+## 🤖 Don't want to read? Copy this into Claude Code
+
+It checks the prerequisites, installs the plugin and sets it up:
 
 ```text
 Set up curl2k6 for me (https://github.com/talikbaku/curl2k6) — a Claude Code plugin that turns a curl into a k6 load test, runs it, writes a report and checks for regressions against the previous run.
@@ -21,13 +24,13 @@ Set up curl2k6 for me (https://github.com/talikbaku/curl2k6) — a Claude Code p
 Short docs: https://github.com/talikbaku/curl2k6/blob/main/llms.txt
 ```
 
-![Claude Code re-runs a load test after a release and flags the regression](docs/media/claude-session.gif)
+## 🤔 Why not just ask Claude for a k6 script?
 
-## ⚡ TL;DR
+- **The verdict is computed.** `compare.mjs` applies fixed, unit-tested rules (p95 worse by >20%, success rate down by >1 pp), not an LLM's opinion.
+- **No false alarms.** A different environment or load is reported as "not like-for-like", never as a regression.
+- **Your stack.** Your CI, your Prometheus / Grafana / Datadog, reports as markdown in git. No Grafana Cloud needed.
 
-- **In:** a curl (or a HAR, Postman or OpenAPI request).
-- **Out:** a k6 test in your repo, runs locally or in your CI, a markdown/wiki report.
-- **Verdict:** computed by a script against the last report, not guessed by the LLM.
+**Works with:** curl · HAR · Postman · OpenAPI → local · Azure DevOps · GitLab / GitHub Actions / Jenkins (your pipeline) → Prometheus · Grafana · Datadog · Elasticsearch · InfluxDB → Markdown · Confluence · Azure DevOps Wiki
 
 ```mermaid
 flowchart LR
@@ -54,7 +57,7 @@ Needs [k6](https://grafana.com/docs/k6/latest/set-up/install-k6/) and Node.js �
 /curl2k6 curl -H 'Authorization: Bearer <TOKEN>' https://api.stage.example.com/v2/items
 ```
 
-1. **First time:** one block of questions → saved to `.curl2k6.yml`. Never asked again.
+1. **First time:** one block of questions, saved to `.curl2k6.yml`. Never asked again.
 2. **Every run:** draft test → your OK → smoke → LOW / MEDIUM / HIGH → report.
 3. **After a release:** *"re-run the load test, did it get slower?"* → comparison with the last report.
 
@@ -64,37 +67,36 @@ What it learns along the way (IP allowlists, caches, root causes) goes to `CURL2
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/media/p95-dark.png">
-  <img src="docs/media/p95-light.png" width="700" alt="p95 latency, previous run → this release: LOW 29 → 42 ms (+44%), MEDIUM 31 → 50 ms (+62%), HIGH 35 → 93 ms (+165%)">
+  <img src="docs/media/p95-light.png" width="600" alt="p95 latency, previous run → this release: LOW 29 → 42 ms (+44%), MEDIUM 31 → 50 ms (+62%), HIGH 35 → 93 ms (+165%)">
 </picture>
 
-| Profile | Metric | Previous | Current | Δ | |
-|---|---|---|---|---|---|
-| LOW | p95 ms | 29.19 | 41.95 | +43.7% | ⚠ regression |
-| HIGH | p95 ms | 35.06 | 92.93 | +165.1% | ⚠ regression |
-| HIGH | timeouts | 0 | 0 | ±0.00 pp | ✓ |
+<sub>Demo service with short custom profiles (20 / 60 / 150 req/s for 15 s), before and after a simulated bad release.</sub>
 
-Full examples: [baseline](examples/reports/items-api-2026-10-09-local-baseline.md) · [regression](examples/reports/items-api-2026-10-09-local-regression.md)
+Full examples: [baseline report](examples/reports/items-api-2026-10-09-local-baseline.md) · [regression report](examples/reports/items-api-2026-10-09-local-regression.md)
 
 ## 🛡️ Safe by default
 
-- 🔑 **Tokens stay in env vars**: never in tests, commits, reports or the chat.
-- 🏭 **Production**: every run needs your explicit OK, one profile at a time.
-- 🧮 **No apples-to-oranges**: a different load or environment is never called a regression.
+- **Secrets:** never written to tests, commits or reports. HAR / Postman imports swap them for env vars before Claude sees them.
+- **Production:** every run needs your explicit OK, one profile at a time.
 
-## 🧪 Try without Claude (2 min)
+## 🧪 Try the demo (2 min)
+
+Needs k6 and Node.js ≥ 18, or nothing at all in [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/talikbaku/curl2k6?quickstart=1)
 
 ```bash
 git clone https://github.com/talikbaku/curl2k6.git && cd curl2k6 && bash examples/run-demo.sh
 ```
 
-![run-demo.sh: baseline, simulated bad release, regression verdict](docs/media/demo.gif)
-
-Nothing installed? [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/talikbaku/curl2k6?quickstart=1)
+<img src="docs/media/demo.gif" width="600" alt="run-demo.sh: baseline, simulated bad release, regression verdict">
 
 ## 📚 More
 
-- [docs/MORE.md](docs/MORE.md): HAR/Postman/OpenAPI input, profiles, limits, CI gate without Claude, comparison with other tools
+**Status:** v1.3.2. Verified locally and on Azure DevOps; other CIs are driven through your existing pipeline. Submitted to the Claude Code plugin directory.
+
+- [docs/MORE.md](docs/MORE.md): input formats, profiles, limits, CI gate without Claude, comparison with other tools
 - [docs/GUIDE.md](docs/GUIDE.md): the full flow, step by step
 - [CHANGELOG.md](CHANGELOG.md) · `npm test` for development
+
+**Useful? ⭐ Star the repo** and tell us which CI template you want next in [Discussions](https://github.com/talikbaku/curl2k6/discussions).
 
 [MIT](LICENSE) © 2026 Talat Gurbanbayov
