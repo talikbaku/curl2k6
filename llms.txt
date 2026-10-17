@@ -1,0 +1,22 @@
+# curl2k6
+
+> Claude Code plugin (skill `curl2k6` + agent `curl2k6-runner`): curl / HAR / Postman / OpenAPI request -> k6 load test -> runs (smoke, low, medium, high) locally or in the team's CI -> markdown/wiki report -> regression verdict against the previous report, computed by a script (compare.mjs), not by the LLM.
+
+## Install
+- Requirements: k6, Node.js >= 22.
+- In Claude Code: `/plugin marketplace add talikbaku/curl2k6`, then `/plugin install curl2k6@curl2k6`.
+
+## Use
+- First time in a repo: `/curl2k6 init` — asks setup questions once (environments, local or CI, metrics, profiles, report destinations, env var names for tokens) and saves them to `.curl2k6.yml`.
+- New test: `/curl2k6 <curl>`, or "load-test request X from file.har / collection.json / openapi.yaml".
+- Re-run: "re-run the load test, did it get slower?".
+- Lessons learned are kept in `CURL2K6-FACTS.md` in the user's repo and read on every run.
+
+## Rules
+- Never paste or store a token; tests read it from an env var.
+- Every production run needs explicit confirmation, one profile at a time.
+- Regressions come only from compare.mjs output; "not like-for-like" / "unconfirmed" are never regressions.
+
+## Docs
+- Details: https://github.com/talikbaku/curl2k6/blob/main/docs/MORE.md
+- Full guide: https://github.com/talikbaku/curl2k6/blob/main/docs/GUIDE.md
